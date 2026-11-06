@@ -198,4 +198,13 @@ export const updateAutoReplySettings = (accountId, data) => api.patch(`/auto-rep
 export const getAutoReplyLogs = (params) => api.get('/auto-reply/logs', { params });
 export const simulateIncomingMessage = (data) => api.post('/auto-reply/simulate', data);
 
+// Analytics endpoints (Phase 11)
+export const getAnalyticsOverview = (params) => api.get('/analytics/overview', { params });
+export const getCampaignAnalytics = (id) => api.get(`/analytics/campaigns/${id}`);
+export const getAutoReplyAnalytics = (params) => api.get('/analytics/auto-reply', { params });
+export const getAdminSystemHealth = () => api.get('/analytics/admin/health');
+export const getAuditLogs = (params) => api.get('/analytics/audit-logs', { params });
+export const exportCampaignsAnalyticsUrl = () =>
+  `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/analytics/export/campaigns`;
+
 export default api;

@@ -90,3 +90,4 @@ activityLogSchema.index({ workspaceId: 1, emailAccountId: 1, providerMessageId: 
 activityLogSchema.index({ workspaceId: 1, from: 1, createdAt: -1 });
 
 export const ActivityLog = mongoose.model('ActivityLog', activityLogSchema);
+

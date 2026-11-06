@@ -7,6 +7,7 @@ import emailAccountRoutes from './emailAccountRoutes.js';
 import campaignRoutes from './campaignRoutes.js';
 import automationRoutes from './automationRoutes.js';
 import autoReplyRoutes from './autoReplyRoutes.js';
+import analyticsRoutes from './analyticsRoutes.js';
 
 const router = express.Router();
 
@@ -19,5 +20,6 @@ router.use('/email-accounts', emailAccountRoutes);
 router.use('/campaigns', campaignRoutes);
 router.use('/automations', automationRoutes);
 router.use('/auto-reply', autoReplyRoutes);
+router.use('/analytics', analyticsRoutes);
 
 export default router;

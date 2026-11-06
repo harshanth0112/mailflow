@@ -502,3 +502,74 @@ This document tracks chronological milestones, architecture choices, and impleme
   - Phase 8 Campaigns: Passed 100%.
   - Phase 9 Scheduling: Passed 100%.
 - **Client production build:** `vite build` compiled with 0 errors (`1693 modules transformed`).
+
+---
+
+## Phase 11 — Analytics & Admin Dashboard (Completed)
+
+### 1. Analytics Aggregation Service (`server/src/services/analyticsService.js`)
+- **Dashboard Overview (`getDashboardAnalytics`):**
+  - Aggregates total, scheduled, and active campaigns.
+  - Aggregates delivery numbers, failed deliveries, bounces, opens, and clicks.
+  - Computes accurate percentages using documented denominators:
+    - `deliveryRate = (delivered / sent) * 100`
+    - `openRate = (uniqueOpens / delivered) * 100`
+    - `clickRate = (uniqueClicks / delivered) * 100`
+  - Audience statistics: Total contacts, subscribed, unsubscribed.
+  - Auto-reply activity metrics: Processed, replied, and skipped.
+  - Filterable by timeframe: `today`, `7d`, `30d`, and `all`.
+- **Campaign Performance Analytics (`getCampaignAnalytics`):**
+  - Granular recipient dispatch metrics, delivery rates, bounce rates, and unsubscribe rates.
+  - Transparent tracking disclosure documenting that email metrics reflect verified provider events without injecting intrusive, spam-triggering tracking pixels.
+- **Auto-Reply Analytics (`getAutoReplyAnalytics`):**
+  - Processed, replied, skipped (cooldowns/loop prevention), and failed reply totals.
+  - Aggregates top frequently triggered rules.
+- **Admin System Health (`getAdminSystemHealth`):**
+  - Real-time Redis connection health and degraded mode status.
+  - BullMQ queue metrics across dispatch, scheduling, and auto-reply queues.
+  - Workspace inventory totals (mailboxes, campaigns, members).
+  - Background worker availability.
+- **CSV Data Export (`exportCampaignsCsv`):**
+  - Export campaign performance datasets with safe CSV cell escaping.
+
+### 2. Audit Trail System (`server/src/models/AuditLog.js` & `server/src/services/auditService.js`)
+- **`AuditLog` Model:**
+  - Tracks security and administrative actions: logins, workspace modifications, member role changes, campaign creation/scheduling/sending, mailbox connections, and auto-reply rules.
+  - Records `actorName`, `actorEmail`, `action`, `entityType`, `entityId`, `details`, `ipAddress`, and `userAgent`.
+  - Strictly strips credentials, passwords, and OAuth tokens before persisting.
+
+### 3. API Endpoints (`/api/v1/analytics/...`)
+| Method | Endpoint | Description | Protection / Validation |
+|---|---|---|---|
+| `GET` | `/api/v1/analytics/overview` | Aggregated dashboard overview metrics | `requireAuth`, `requireWorkspace`, `analytics:read` |
+| `GET` | `/api/v1/analytics/campaigns/:id` | Performance analytics for a campaign | `requireAuth`, `requireWorkspace`, `analytics:read` |
+| `GET` | `/api/v1/analytics/auto-reply` | Auto-reply summary and top rules | `requireAuth`, `requireWorkspace`, `analytics:read` |
+| `GET` | `/api/v1/analytics/admin/health` | Redis, BullMQ queue, and worker health | `requireAuth`, `requireWorkspace`, `settings:manage` |
+| `GET` | `/api/v1/analytics/export/campaigns` | Export campaign analytics to CSV | `requireAuth`, `requireWorkspace`, `analytics:read` |
+| `GET` | `/api/v1/analytics/audit-logs` | Filterable workspace security audit trail | `requireAuth`, `requireWorkspace`, `settings:manage` |
+
+### 4. Frontend Implementation
+- **`AnalyticsPage.jsx` (`client/src/pages/analytics/AnalyticsPage.jsx`):**
+  - Replaced coming soon placeholder with a tabbed analytics interface:
+    1. *Campaign Delivery:* Timeframe filter (`today`, `7d`, `30d`, `all`), stat cards, deliverability rates, engagement transparency disclosure, and CSV export.
+    2. *Auto-Reply Insights:* Messages processed, replies sent, skipped messages, and most triggered rules.
+    3. *System & Worker Health:* Redis status indicator, workspace inventory, and background worker state.
+- **`ActivityPage.jsx` (`client/src/pages/activity/ActivityPage.jsx`):**
+  - Replaced placeholder with live audit trail view, action type filtering, keyword search, and actor/timestamp displays.
+
+### 5. Verification Checks
+- **Smoke test suite (`server/test_phase11_analytics.js`):**
+  - Aggregation calculation accuracy (passed).
+  - Rate calculations with documented denominators (passed).
+  - Auto-reply analytics aggregation (passed).
+  - Audit log recording and querying (passed).
+  - CSV export generation (passed).
+  - Multi-tenant IDOR protection on analytics queries (passed).
+- **Regression test suite:**
+  - Phase 3 Workspace: Passed 100%.
+  - Phase 6 Contacts: Passed 100%.
+  - Phase 7 Email Accounts: Passed 100%.
+  - Phase 8 Campaigns: Passed 100%.
+  - Phase 9 Scheduling: Passed 100%.
+  - Phase 10 Automatic Replies: Passed 100%.
+- **Client production build:** `vite build` compiled with 0 errors (`1693 modules transformed`).

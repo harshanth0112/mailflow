@@ -110,3 +110,4 @@ export const autoReplyRuleSchema = new mongoose.Schema(
 autoReplyRuleSchema.index({ workspaceId: 1, emailAccountId: 1, priority: -1 });
 
 export const AutoReplyRule = mongoose.model('AutoReplyRule', autoReplyRuleSchema);
+

@@ -36,3 +36,4 @@ export const autoReplySettingsSchema = z.object({
   ignoreOwnMessages: z.boolean().optional(),
   pollIntervalSeconds: z.number().int().min(10).max(3600).optional(),
 });
+
