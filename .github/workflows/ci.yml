@@ -60,6 +60,10 @@ jobs:
 
       - name: Run Backend Regression & Security Test Suites
         working-directory: server
+        env:
+          NODE_ENV: test
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
         run: |
           node test_phase3_workspace.js
           node test_phase6_contacts.js

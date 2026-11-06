@@ -16,8 +16,11 @@ export const createRedisConnection = () => {
         enableReadyCheck: false,
         lazyConnect: true,
         retryStrategy: (times) => {
+          // In test mode: allow up to 3 quick retries so CI Redis (which is
+          // always available) connects successfully, then give up fast so a
+          // missing local Redis doesn't hang the test runner.
           if (process.env.NODE_ENV === 'test') {
-            return null; // Stop retrying immediately during tests
+            return times <= 3 ? Math.min(times * 100, 300) : null;
           }
           if (times > 5) {
             return 10000; // Cap backoff
