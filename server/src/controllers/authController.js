@@ -11,10 +11,12 @@ import {
   signRefreshToken,
   verifyRefreshToken,
   getRefreshTokenCookieOptions,
+  getClearRefreshTokenCookieOptions,
 } from '../utils/tokenUtils.js';
 import { authEmailService } from '../services/authEmailService.js';
 import { createDefaultWorkspaceForUser } from '../services/workspaceService.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
+import { logger } from '../utils/logger.js';
 
 // In-memory fallback stores for local development without active MongoDB
 const devUsers = new Map();
@@ -24,6 +26,10 @@ const isDbConnected = () => mongoose.connection.readyState === 1;
 
 export const register = async (req, res, next) => {
   try {
+    if (!authEmailService.isConfigured()) {
+      return sendError(res, 503, 'Transactional email is not configured for this service.');
+    }
+
     const { name, email, password } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -68,7 +74,7 @@ export const register = async (req, res, next) => {
         await createDefaultWorkspaceForUser(newUser);
       } catch (wsErr) {
         // Log workspace creation error, non-blocking to allow retry during verification
-        console.error('Initial workspace provisioning error:', wsErr.message);
+        logger.error('Initial workspace provisioning failed.', { errorName: wsErr.name });
       }
     } else {
       const id = new mongoose.Types.ObjectId().toString();
@@ -161,7 +167,9 @@ export const verifyEmail = async (req, res, next) => {
     try {
       await createDefaultWorkspaceForUser(user);
     } catch (wsErr) {
-      console.error('Workspace verification provisioning error:', wsErr.message);
+      logger.error('Workspace verification provisioning failed.', {
+        errorName: wsErr.name,
+      });
     }
 
     // Queue welcome email
@@ -183,6 +191,10 @@ export const verifyEmail = async (req, res, next) => {
 
 export const resendVerification = async (req, res, next) => {
   try {
+    if (!authEmailService.isConfigured()) {
+      return sendError(res, 503, 'Transactional email is not configured for this service.');
+    }
+
     const { email } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -303,7 +315,13 @@ export const login = async (req, res, next) => {
     }
 
     // Send login security alert notification asynchronously
-    authEmailService.sendLoginSecurityNotification(user, clientIp, userAgent).catch(() => {});
+    authEmailService
+      .sendLoginSecurityNotification(user, clientIp, userAgent)
+      .catch((error) =>
+        logger.warn('Login security notification was not delivered.', {
+          errorName: error.name,
+        })
+      );
 
     // Set secure HttpOnly cookie for refresh token
     res.cookie('refreshToken', rawRefreshToken, getRefreshTokenCookieOptions());
@@ -311,7 +329,6 @@ export const login = async (req, res, next) => {
     return sendSuccess(res, 200, 'Login successful', {
       user: user.toSafeObject ? user.toSafeObject() : user,
       accessToken,
-      refreshToken: rawRefreshToken, // provided in JSON as well for environments where cookies are suppressed
     });
   } catch (error) {
     next(error);
@@ -320,7 +337,7 @@ export const login = async (req, res, next) => {
 
 export const refreshToken = async (req, res, next) => {
   try {
-    const rawRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+    const rawRefreshToken = req.cookies.refreshToken;
 
     if (!rawRefreshToken) {
       return sendError(res, 401, 'Refresh token required');
@@ -404,7 +421,6 @@ export const refreshToken = async (req, res, next) => {
 
     return sendSuccess(res, 200, 'Token refreshed successfully', {
       accessToken,
-      refreshToken: newRawRefreshToken,
     });
   } catch (error) {
     next(error);
@@ -413,7 +429,7 @@ export const refreshToken = async (req, res, next) => {
 
 export const logout = async (req, res, next) => {
   try {
-    const rawRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+    const rawRefreshToken = req.cookies.refreshToken;
 
     if (rawRefreshToken) {
       const tokenHash = hashToken(rawRefreshToken);
@@ -429,10 +445,7 @@ export const logout = async (req, res, next) => {
     }
 
     // Clear cookie
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      path: '/api/v1/auth',
-    });
+    res.clearCookie('refreshToken', getClearRefreshTokenCookieOptions());
 
     return sendSuccess(res, 200, 'Logged out successfully');
   } catch (error) {
@@ -442,6 +455,10 @@ export const logout = async (req, res, next) => {
 
 export const forgotPassword = async (req, res, next) => {
   try {
+    if (!authEmailService.isConfigured()) {
+      return sendError(res, 503, 'Transactional email is not configured for this service.');
+    }
+
     const { email } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
 

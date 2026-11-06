@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://localhost:5000/api/v1' : '/api/v1');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -61,23 +65,17 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const storedRefreshToken = localStorage.getItem('mailflow_refresh_token');
-
       try {
         const refreshResponse = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/auth/refresh`,
-          { refreshToken: storedRefreshToken },
+          `${API_BASE_URL}/auth/refresh`,
+          {},
           { withCredentials: true }
         );
 
         const newAccessToken = refreshResponse.data?.data?.accessToken;
-        const newRefreshToken = refreshResponse.data?.data?.refreshToken;
 
         if (newAccessToken) {
           localStorage.setItem('mailflow_token', newAccessToken);
-          if (newRefreshToken) {
-            localStorage.setItem('mailflow_refresh_token', newRefreshToken);
-          }
           api.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
           processQueue(null, newAccessToken);
           return api(originalRequest);
@@ -85,7 +83,6 @@ api.interceptors.response.use(
       } catch (refreshErr) {
         processQueue(refreshErr, null);
         localStorage.removeItem('mailflow_token');
-        localStorage.removeItem('mailflow_refresh_token');
         localStorage.removeItem('mailflow_user');
         return Promise.reject(refreshErr);
       } finally {
@@ -153,7 +150,7 @@ export const executeContactImport = (formData) =>
   });
 export const exportContactsUrl = (format = 'csv', filters = {}) => {
   const params = new URLSearchParams({ format, ...filters });
-  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/contacts/export?${params.toString()}`;
+  return `${API_BASE_URL}/contacts/export?${params.toString()}`;
 };
 
 // Email Account endpoints
@@ -205,6 +202,6 @@ export const getAutoReplyAnalytics = (params) => api.get('/analytics/auto-reply'
 export const getAdminSystemHealth = () => api.get('/analytics/admin/health');
 export const getAuditLogs = (params) => api.get('/analytics/audit-logs', { params });
 export const exportCampaignsAnalyticsUrl = () =>
-  `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/analytics/export/campaigns`;
+  `${API_BASE_URL}/analytics/export/campaigns`;
 
 export default api;

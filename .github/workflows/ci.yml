@@ -76,6 +76,8 @@ jobs:
           node test_phase10_autoreply.js
           node test_phase11_analytics.js
           node test_phase12_production.js
+          node test_deployment_readiness.js
+          node test_sendliberty.js
           node test_redis_bullmq_integration.js
           node test_transactional_email.js
           node test_security_review.js

@@ -8,6 +8,8 @@ import {
   getSecurityLoginAlertHtml,
   getEmailChangeVerificationHtml,
 } from './emailTemplateService.js';
+import { ApiError } from '../utils/apiResponse.js';
+import { sendlibertyProvider } from './email/SendlibertyProvider.js';
 
 class AuthEmailService {
   constructor() {
@@ -16,8 +18,11 @@ class AuthEmailService {
   }
 
   initTransporter() {
-    // Only attempt real SMTP transport if SMTP credentials or host are configured
-    if (env.SMTP_USER && env.SMTP_PASS) {
+    if (
+      env.EMAIL_PROVIDER === 'smtp' &&
+      env.SMTP_USER &&
+      env.SMTP_PASS
+    ) {
       this.transporter = nodemailer.createTransport({
         host: env.SMTP_HOST,
         port: env.SMTP_PORT,
@@ -27,17 +32,70 @@ class AuthEmailService {
           pass: env.SMTP_PASS,
         },
       });
-      console.log(`📧 SMTP Transporter initialized using ${env.SMTP_HOST}:${env.SMTP_PORT}`);
-    } else {
-      // In development or test without live credentials, fallback to safe console mock
-      this.transporter = null;
-      console.log('ℹ️ SMTP credentials not provided. Transactional emails will log cleanly to console.');
     }
   }
 
+  isConfigured() {
+    if (this.transporter) return true;
+    if (env.EMAIL_PROVIDER === 'resend') {
+      return Boolean(env.RESEND_API_KEY && env.SMTP_FROM_EMAIL);
+    }
+    if (env.EMAIL_PROVIDER === 'sendliberty') {
+      return sendlibertyProvider.isConfigured();
+    }
+    if (env.EMAIL_PROVIDER === 'smtp') {
+      return Boolean(env.SMTP_USER && env.SMTP_PASS);
+    }
+    return env.EMAIL_PROVIDER === 'console' && env.NODE_ENV !== 'production';
+  }
+
   async sendMail({ to, subject, html, text }) {
-    const from = `"${env.SMTP_FROM_NAME}" <${env.SMTP_FROM_EMAIL || env.SMTP_USER || 'noreply@mailflow.io'}>`;
-    
+    const fromAddress = env.SMTP_FROM_EMAIL || env.SMTP_USER || 'noreply@mailflow.io';
+    const from = `"${env.SMTP_FROM_NAME}" <${fromAddress}>`;
+
+    if (!this.isConfigured()) {
+      throw new ApiError(503, 'Transactional email is not configured for this service.');
+    }
+
+    if (env.EMAIL_PROVIDER === 'resend' && !this.transporter) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject,
+          html,
+          text: text || html.replace(/<[^>]*>?/gm, ''),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new ApiError(502, 'Transactional email provider rejected the message.');
+      }
+
+      const result = await response.json();
+      return { success: true, messageId: result.id };
+    }
+
+    if (env.EMAIL_PROVIDER === 'sendliberty' && !this.transporter) {
+      try {
+        return await sendlibertyProvider.sendEmail({
+          from: env.SENDLIBERTY_FROM_EMAIL,
+          to,
+          subject,
+          html,
+          text: text || html.replace(/<[^>]*>?/gm, ''),
+        });
+      } catch (error) {
+        throw new ApiError(502, 'Transactional email delivery failed.');
+      }
+    }
+
     if (this.transporter) {
       try {
         const info = await this.transporter.sendMail({
@@ -47,16 +105,14 @@ class AuthEmailService {
           html,
           text: text || html.replace(/<[^>]*>?/gm, ''), // fallback plaintext
         });
-        console.log(`✉️ Transactional email sent to ${to}: ${info.messageId}`);
         return { success: true, messageId: info.messageId };
       } catch (error) {
-        console.error(`❌ Failed to deliver email to ${to}:`, error.message);
-        // Do not throw; return graceful result so auth flow does not completely crash
-        return { success: false, error: error.message };
+        throw new ApiError(502, 'Transactional email delivery failed.');
       }
-    } else {
-      // Safe development/preview log
-      console.log('\n================== [TRANSACTIONAL EMAIL DISPATCHED] ==================');
+    }
+
+    if (env.EMAIL_PROVIDER === 'console' && env.NODE_ENV !== 'production') {
+      console.log('\n================== [TRANSACTIONAL EMAIL LOCAL PREVIEW] ==================');
       console.log(`TO:      ${to}`);
       console.log(`FROM:    ${from}`);
       console.log(`SUBJECT: ${subject}`);
@@ -65,6 +121,8 @@ class AuthEmailService {
       console.log('======================================================================\n');
       return { success: true, mode: 'console_dev_preview' };
     }
+
+    throw new ApiError(503, 'Transactional email is not configured for this service.');
   }
 
   async sendVerificationEmail(user, rawToken) {
@@ -128,4 +186,3 @@ class AuthEmailService {
 
 export const authEmailService = new AuthEmailService();
 export default authEmailService;
-

@@ -625,3 +625,26 @@ This document tracks chronological milestones, architecture choices, and impleme
   - Phase 12 Production Hardening: Passed 100%.
 - **Client production build:** `npm run build:client` transformed 1693 modules and compiled `dist/` with 0 errors.
 
+## Staging Deployment Preparation
+
+The staging implementation and handoff are prepared, but no service has been deployed and no cloud resources have been created.
+
+### Completed
+- Added the staging-specific Vercel, Render, MongoDB Atlas, and optional Upstash setup and rollback guidance in [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+- Added Vercel SPA routing and a Render API Blueprint configured with queues and transactional email disabled by default.
+- Hardened production configuration validation, startup/readiness checks, CORS, logging, and graceful shutdown.
+- Made refresh tokens cookie-only and added a regression test for registration, verification, login, refresh rotation, and logout.
+- Added an HTTPS Resend adapter and explicit production email/queue readiness gates.
+
+### Local verification
+- `npm --workspace=server test` passed with `NODE_ENV=test`, including the CI deployment-readiness test.
+- `node --check` passed for all 77 JavaScript files under `server/src` and the added deployment-readiness test.
+- `git diff --check` passed.
+- Production refresh-cookie options were checked for `HttpOnly`, `Secure`, `SameSite=None`, and the `/api/v1/auth` path.
+- The client production build and Vercel SPA route fallback were verified in the earlier staging-readiness checks.
+
+### External checks not performed
+- A read-only MongoDB Atlas ping was attempted using the supplied connection details but failed with `ECONNREFUSED`. Connectivity and credential validity remain unverified; no data was written.
+- Resend delivery and sender-domain verification remain unverified because no provider credentials/domain were provided.
+- Redis/BullMQ connectivity and continuous worker execution remain unverified; the free staging configuration keeps queues disabled, and Render Free does not provide a continuous background worker.
+- No Vercel or Render deployment, cloud resource creation, or repository push was performed.

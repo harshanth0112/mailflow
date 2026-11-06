@@ -3,12 +3,24 @@ import { Campaign, CAMPAIGN_STATUS, RECIPIENT_SELECTION_TYPE } from '../models/C
 import { CampaignRecipient, RECIPIENT_STATUS } from '../models/CampaignRecipient.js';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS } from '../models/Contact.js';
 import { EmailAccount, CONNECTION_STATUS } from '../models/EmailAccount.js';
-import { emailProviderRegistry } from './email/EmailProviderRegistry.js';
+import { getCampaignEmailProvider } from './email/campaignEmailProvider.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
 import { personalizeContent } from '../utils/templatePersonalizer.js';
 import { generateRandomToken } from '../utils/tokenUtils.js';
 import { getQueue, QUEUE_NAMES } from '../queues/queueManager.js';
-import { isRedisConnected } from '../config/redis.js';
+import { isQueueWorkerReady } from '../config/redis.js';
+import { env } from '../config/env.js';
+import { ApiError } from '../utils/apiResponse.js';
+
+const requireProductionQueueWorker = async () => {
+  if (env.NODE_ENV !== 'production') return;
+  if (!env.QUEUE_FEATURES_ENABLED) {
+    throw new ApiError(503, 'Campaign sending and scheduling are disabled until a worker is deployed.');
+  }
+  if (!(await isQueueWorkerReady())) {
+    throw new ApiError(503, 'Campaign sending and scheduling are unavailable because the worker is not ready.');
+  }
+};
 
 // In-memory fallback map for test/offline mode
 export const devCampaigns = new Map();
@@ -383,9 +395,10 @@ export const campaignService = {
       isHtml: false,
     });
 
-    const provider = emailProviderRegistry.get(senderAccount.provider);
-    const accessToken = decryptToken(senderAccount.encryptedAccessToken);
-    const refreshToken = decryptToken(senderAccount.encryptedRefreshToken);
+    const provider = getCampaignEmailProvider(senderAccount);
+    const isSendliberty = provider.name === 'sendliberty';
+    const accessToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedAccessToken);
+    const refreshToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedRefreshToken);
 
     const result = await provider.sendEmail({
       from: senderAccount.emailAddress,
@@ -408,6 +421,7 @@ export const campaignService = {
    * 4. Prepares execution compatible with Phase 9 background job queues.
    */
   async triggerCampaignSend({ workspaceId, campaignId, idempotencyKey = null }) {
+    await requireProductionQueueWorker();
     let campaign = null;
 
     if (mongoose.connection.readyState === 1) {
@@ -436,6 +450,24 @@ export const campaignService = {
     // Sender validation
     if (!campaign.senderEmailAccountId) {
       throw new Error('Cannot send campaign without a valid connected sender email account.');
+    }
+
+    if (env.CAMPAIGN_EMAIL_PROVIDER === 'sendliberty') {
+      const senderAccountId = campaign.senderEmailAccountId._id || campaign.senderEmailAccountId;
+      let senderAccount;
+      if (mongoose.connection.readyState === 1) {
+        senderAccount = await EmailAccount.findOne({
+          _id: senderAccountId,
+          workspaceId,
+        }).select('provider emailAddress');
+      } else {
+        const { devEmailAccounts } = await import('./emailAccountService.js');
+        senderAccount = devEmailAccounts.get(senderAccountId.toString());
+      }
+      if (!senderAccount) {
+        throw new Error('Configured sender mailbox account was not found or access denied.');
+      }
+      getCampaignEmailProvider(senderAccount);
     }
 
     // Recheck recipient eligibility immediately before execution!
@@ -481,7 +513,13 @@ export const campaignService = {
           { jobId: `campaign-dispatch-${campaign._id.toString()}-${assignedKey}` }
         );
       } catch (redisErr) {
-        console.warn(`[CampaignService] Could not enqueue BullMQ dispatch job: ${redisErr.message}`);
+        console.warn(`Campaign dispatch could not be confirmed (${redisErr.name}).`);
+        if (env.NODE_ENV === 'production') {
+          throw new ApiError(
+            503,
+            'Campaign dispatch could not be confirmed. Check campaign status before retrying.'
+          );
+        }
       }
     } else {
       devCampaigns.set(campaignId, campaign);
@@ -504,6 +542,7 @@ export const campaignService = {
    * Schedule campaign for a future date and time
    */
   async scheduleCampaign({ workspaceId, campaignId, scheduledAt, timezone = 'UTC' }) {
+    await requireProductionQueueWorker();
     const scheduledDate = new Date(scheduledAt);
     if (isNaN(scheduledDate.getTime())) {
       throw new Error('Invalid scheduledAt timestamp format');
@@ -560,7 +599,13 @@ export const campaignService = {
           }
         );
       } catch (redisErr) {
-        console.warn(`[CampaignService] Could not enqueue BullMQ delayed job: ${redisErr.message}`);
+        console.warn(`Campaign schedule could not be confirmed (${redisErr.name}).`);
+        if (env.NODE_ENV === 'production') {
+          throw new ApiError(
+            503,
+            'Campaign schedule could not be confirmed. Check campaign status before retrying.'
+          );
+        }
       }
     } else {
       devCampaigns.set(campaignId, campaign);
@@ -633,7 +678,7 @@ export const campaignService = {
           await schedJob.remove();
         }
       } catch (redisErr) {
-        console.warn(`[CampaignService] Could not remove BullMQ delayed job: ${redisErr.message}`);
+        console.warn(`Could not remove the scheduled BullMQ job (${redisErr.name}).`);
       }
     } else {
       devCampaigns.set(campaignId, campaign);
@@ -721,7 +766,7 @@ export const campaignService = {
             console.log(`[Recovery] Re-enqueued stranded QUEUED campaign: ${camp._id}`);
           }
         } catch (err) {
-          console.warn(`[Recovery] Failed to recover campaign ${camp._id}:`, err.message);
+          console.warn(`Campaign recovery failed for ${camp._id} (${err.name}).`);
         }
       }
 
@@ -741,7 +786,7 @@ export const campaignService = {
             console.log(`[Recovery] Enqueued overdue SCHEDULED campaign: ${camp._id}`);
           }
         } catch (err) {
-          console.warn(`[Recovery] Failed to recover scheduled campaign ${camp._id}:`, err.message);
+          console.warn(`Scheduled campaign recovery failed for ${camp._id} (${err.name}).`);
         }
       }
     } else {
@@ -754,4 +799,3 @@ export const campaignService = {
     return { recoveredCount };
   },
 };
-

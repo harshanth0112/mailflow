@@ -7,6 +7,7 @@ import { isRedisConnected } from './src/config/redis.js';
 import { sanitizeForLogging } from './src/utils/logger.js';
 import { encryptToken, decryptToken } from './src/utils/cryptoUtils.js';
 import { mongoSanitize } from './src/middleware/mongoSanitize.js';
+import { getRefreshTokenCookieOptions } from './src/utils/tokenUtils.js';
 
 console.log('\n--- MAILFLOW PHASE 12: PRODUCTION HARDENING & RELIABILITY TEST SUITE ---\n');
 
@@ -87,18 +88,28 @@ const runPhase12Tests = async () => {
     },
   };
 
-  getHealth({}, mockRes);
+  await getHealth({}, mockRes, (error) => {
+    throw error;
+  });
 
-  assert.strictEqual(mockRes.statusCode, 200, 'Health endpoint did not return 200');
-  assert.strictEqual(healthResult.success, true, 'Health check response format invalid');
+  const expectedHealthStatus = getDbStatus().isConnected ? 200 : 503;
+  assert.strictEqual(mockRes.statusCode, expectedHealthStatus, 'Health endpoint readiness status invalid');
+  assert.strictEqual(healthResult.success, expectedHealthStatus === 200, 'Health response format invalid');
   assert.ok(healthResult.data.database, 'Database health section missing');
   assert.ok(healthResult.data.redis, 'Redis health section missing');
+  assert.ok(healthResult.data.worker, 'Worker health section missing');
   
   // Ensure no internal DB connection strings or credentials leaked in response
   const jsonStr = JSON.stringify(healthResult.data);
   assert.ok(!jsonStr.includes('mongodb+srv'), 'MongoDB URI leaked in health endpoint');
   assert.ok(!jsonStr.includes('password'), 'Password leaked in health endpoint');
-  console.log('✓ Health endpoint responded with 200 OK and no infrastructure secrets exposed');
+  console.log('✓ Health endpoint reports readiness and no infrastructure secrets');
+
+  // 4.1 Refresh-token cookie hardening
+  const cookieOptions = getRefreshTokenCookieOptions();
+  assert.strictEqual(cookieOptions.httpOnly, true, 'Refresh token cookie must be HttpOnly');
+  assert.strictEqual(cookieOptions.path, '/api/v1/auth', 'Refresh token cookie path is too broad');
+  console.log('✓ Refresh token is configured as an HttpOnly, path-scoped cookie');
 
   // 5. Test App Middleware (Helmet & Security Configuration)
   console.log('\n[Test 5] HTTP Security Headers & Helmet Protection');

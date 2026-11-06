@@ -6,9 +6,10 @@ import { Campaign, CAMPAIGN_STATUS } from '../models/Campaign.js';
 import { CampaignRecipient, RECIPIENT_STATUS } from '../models/CampaignRecipient.js';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS } from '../models/Contact.js';
 import { EmailAccount } from '../models/EmailAccount.js';
-import { emailProviderRegistry } from '../services/email/EmailProviderRegistry.js';
+import { getCampaignEmailProvider } from '../services/email/campaignEmailProvider.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
 import { personalizeContent } from '../utils/templatePersonalizer.js';
+import { logger } from '../utils/logger.js';
 
 let dispatchWorker = null;
 let schedulingWorker = null;
@@ -50,9 +51,10 @@ export const processCampaignDispatch = async (job) => {
     throw new Error(`Sender email account for campaign ${campaignId} was not found or access denied.`);
   }
 
-  const provider = emailProviderRegistry.get(senderAccount.provider);
-  const accessToken = decryptToken(senderAccount.encryptedAccessToken);
-  const refreshToken = decryptToken(senderAccount.encryptedRefreshToken);
+  const provider = getCampaignEmailProvider(senderAccount);
+  const isSendliberty = provider.name === 'sendliberty';
+  const accessToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedAccessToken);
+  const refreshToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedRefreshToken);
 
   // Load pending recipient records for this campaign
   const pendingRecipients = await CampaignRecipient.find({
@@ -66,9 +68,10 @@ export const processCampaignDispatch = async (job) => {
   let sentCount = 0;
   let failedCount = 0;
   let skippedCount = 0;
+  let stopDispatch = false;
 
   // Process recipients with controlled concurrency (e.g. 5 at a time) to respect provider rate limits
-  const CONCURRENCY = 5;
+  const CONCURRENCY = isSendliberty ? 1 : 5;
   for (let i = 0; i < pendingRecipients.length; i += CONCURRENCY) {
     // Check if campaign was cancelled during execution
     const freshCheck = await Campaign.findById(campaignId).select('status');
@@ -139,7 +142,37 @@ export const processCampaignDispatch = async (job) => {
           await recipient.save();
           sentCount++;
         } catch (err) {
-          console.error(`[Worker] Error sending to recipient ${recipient.email}:`, err.message);
+          const maxAttempts = job.opts?.attempts || 3;
+          if (isSendliberty && err.retryable && job.attemptsMade < maxAttempts - 1) {
+            logger.warn('Campaign recipient delivery will be retried.', {
+              campaignId,
+              errorCode: err.code,
+            });
+            if (err.retryAfterMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, err.retryAfterMs));
+            }
+            throw err;
+          }
+          if (isSendliberty && err.retryable) {
+            const failedRecipients = [
+              recipient,
+              ...pendingRecipients.slice(i + 1),
+            ];
+            for (const failedRecipient of failedRecipients) {
+              failedRecipient.recipientStatus = RECIPIENT_STATUS.FAILED;
+              failedRecipient.errorCode = err.code || 'SEND_ERROR';
+              failedRecipient.errorMessage = 'Sendliberty retry limit was exhausted before delivery.';
+              await failedRecipient.save();
+              failedCount++;
+            }
+            stopDispatch = true;
+            return;
+          }
+          logger.warn('Campaign recipient delivery failed.', {
+            campaignId,
+            errorName: err.name,
+            errorCode: err.code,
+          });
           recipient.recipientStatus = RECIPIENT_STATUS.FAILED;
           recipient.errorCode = err.code || 'SEND_ERROR';
           recipient.errorMessage = err.message || 'Unknown provider error';
@@ -148,19 +181,28 @@ export const processCampaignDispatch = async (job) => {
         }
       })
     );
+    if (stopDispatch) break;
   }
 
   // Update Campaign Statistics and Final Status
-  campaign.statistics.sent += sentCount;
-  campaign.statistics.failed += failedCount;
+  campaign.statistics.sent = await CampaignRecipient.countDocuments({
+    campaignId,
+    workspaceId,
+    recipientStatus: RECIPIENT_STATUS.SENT,
+  });
+  campaign.statistics.failed = await CampaignRecipient.countDocuments({
+    campaignId,
+    workspaceId,
+    recipientStatus: RECIPIENT_STATUS.FAILED,
+  });
   campaign.completedAt = new Date();
 
   if (campaign.status !== CAMPAIGN_STATUS.CANCELLED) {
-    if (failedCount === 0 && sentCount > 0) {
+    if (campaign.statistics.failed === 0 && campaign.statistics.sent > 0) {
       campaign.status = CAMPAIGN_STATUS.SENT;
-    } else if (sentCount > 0 && failedCount > 0) {
+    } else if (campaign.statistics.sent > 0 && campaign.statistics.failed > 0) {
       campaign.status = CAMPAIGN_STATUS.PARTIALLY_FAILED;
-    } else if (sentCount === 0 && failedCount > 0) {
+    } else if (campaign.statistics.sent === 0 && campaign.statistics.failed > 0) {
       campaign.status = CAMPAIGN_STATUS.FAILED;
     } else if (skippedCount > 0 && sentCount === 0) {
       campaign.status = CAMPAIGN_STATUS.FAILED;
@@ -235,7 +277,10 @@ export const startBackgroundWorkers = () => {
   });
 
   dispatchWorker.on('failed', async (job, err) => {
-    console.error(`[Worker] Dispatch job ${job?.id} failed: ${err.message}`);
+    logger.error('Campaign dispatch job failed.', {
+      jobId: job?.id,
+      errorName: err.name,
+    });
     // If all attempts exhausted, update campaign status in DB so it doesn't stay stuck in PROCESSING
     if (job && job.attemptsMade >= (job.opts?.attempts || 3)) {
       try {
@@ -251,7 +296,9 @@ export const startBackgroundWorkers = () => {
           console.warn(`[Worker] Campaign ${campaignId} exhausted all retries. Marked as FAILED.`);
         }
       } catch (dbErr) {
-        console.error(`[Worker] Failed to update campaign status on job failure: ${dbErr.message}`);
+        logger.error('Campaign status update failed after job exhaustion.', {
+          errorName: dbErr.name,
+        });
       }
     }
   });
@@ -283,4 +330,3 @@ export const stopBackgroundWorkers = async () => {
   if (schedulingWorker) await schedulingWorker.close();
   console.log('Background workers stopped.');
 };
-

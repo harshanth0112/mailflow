@@ -1,11 +1,7 @@
 import crypto from 'crypto';
 import { env } from '../config/env.js';
 
-// Derive or create a consistent 32-byte key from ENCRYPTION_KEY or fallback to a deterministic SHA256 of JWT_ACCESS_SECRET
-const getMasterKey = () => {
-  const secret = process.env.ENCRYPTION_KEY || env.JWT_ACCESS_SECRET || 'mailflow-default-encryption-master-secret-32b';
-  return crypto.createHash('sha256').update(String(secret)).digest();
-};
+const getMasterKey = () => Buffer.from(env.ENCRYPTION_KEY, 'hex');
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // Standard 96-bit IV for GCM
@@ -53,4 +49,3 @@ export const decryptToken = (encryptedComposite) => {
   
   return decrypted;
 };
-

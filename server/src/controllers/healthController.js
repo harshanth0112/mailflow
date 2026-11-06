@@ -1,36 +1,50 @@
 import { getDbStatus } from '../config/database.js';
-import { isRedisConnected } from '../config/redis.js';
+import { isQueueWorkerReady, isRedisConnected } from '../config/redis.js';
 import { env } from '../config/env.js';
 
-export const getHealth = (req, res) => {
-  const db = getDbStatus();
-  const redisHealthy = isRedisConnected();
-  const isHealthy = db.isConnected;
+export const getHealth = async (req, res, next) => {
+  try {
+    const db = getDbStatus();
+    const redisHealthy = isRedisConnected();
+    const workerHealthy =
+      !env.QUEUE_FEATURES_ENABLED || (redisHealthy && (await isQueueWorkerReady()));
+    const isHealthy = db.isConnected && workerHealthy;
 
-  const healthData = {
-    status: isHealthy ? 'healthy' : 'degraded',
-    service: 'mailflow-api',
-    environment: env.NODE_ENV,
-    timestamp: new Date().toISOString(),
-    uptime: Math.floor(process.uptime()),
-    database: {
-      status: db.status,
-      connected: db.isConnected,
-    },
-    redis: {
-      status: redisHealthy ? 'connected' : 'disconnected',
-      connected: redisHealthy,
-    },
-  };
+    const healthData = {
+      status: isHealthy ? 'healthy' : 'degraded',
+      service: 'mailflow-api',
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+      database: {
+        status: db.status,
+        connected: db.isConnected,
+      },
+      redis: {
+        status: env.QUEUE_FEATURES_ENABLED
+          ? redisHealthy
+            ? 'connected'
+            : 'disconnected'
+          : 'disabled',
+        connected: redisHealthy,
+      },
+      worker: {
+        status: env.QUEUE_FEATURES_ENABLED
+          ? workerHealthy
+            ? 'connected'
+            : 'unavailable'
+          : 'disabled',
+        required: env.QUEUE_FEATURES_ENABLED,
+      },
+    };
 
-  // 200 OK so container orchestrators (K8s, ECS, Fly, Render) recognize HTTP readiness
-  return res.status(200).json({
-    success: true,
-    statusCode: 200,
-    message: isHealthy
-      ? 'All systems operational'
-      : 'API is running in degraded mode',
-    data: healthData,
-  });
+    const statusCode = isHealthy ? 200 : 503;
+    return res.status(statusCode).json({
+      success: isHealthy,
+      statusCode,
+      message: isHealthy ? 'API is ready' : 'API dependencies are not ready',
+      data: healthData,
+    });
+  } catch (error) {
+    return next(error);
+  }
 };
-

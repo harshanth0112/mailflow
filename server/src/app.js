@@ -35,15 +35,15 @@ app.use(
 app.use(cookieParser());
 
 // CORS Configuration
-const allowedOrigins = [env.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'].filter(Boolean);
+const allowedOrigins =
+  env.NODE_ENV === 'production'
+    ? [env.CLIENT_URL]
+    : [env.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'];
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, server-to-server)
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      if (!origin) return callback(null, false);
+      return callback(null, allowedOrigins.includes(origin));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -53,7 +53,14 @@ app.use(
 
 // Logging
 if (env.NODE_ENV !== 'test') {
-  app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
+  morgan.token('path', (req) => req.path);
+  app.use(
+    morgan(
+      env.NODE_ENV === 'development'
+        ? 'dev'
+        : ':method :path :status :response-time ms'
+    )
+  );
 }
 
 // Body parsers with payload limit protection

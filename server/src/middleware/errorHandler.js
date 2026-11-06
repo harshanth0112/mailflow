@@ -10,13 +10,16 @@ export const errorHandler = (err, req, res, next) => {
 
   // Log error using structured logger with sensitive data redaction
   if (statusCode >= 500) {
-    logger.error(`Server Error: ${err.message}`, {
-      path: req.originalUrl,
-      method: req.method,
-      ip: req.ip,
-      errorName: err.name,
-      ...(env.NODE_ENV === 'development' && { stack: err.stack }),
-    });
+    logger.error(
+      env.NODE_ENV === 'development' ? `Server Error: ${err.message}` : 'Server request failed.',
+      {
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+        errorName: err.name,
+        ...(env.NODE_ENV === 'development' && { stack: err.stack }),
+      }
+    );
   }
 
   // Handle Zod validation errors

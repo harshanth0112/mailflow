@@ -6,6 +6,7 @@ import { EmailAccount, CONNECTION_STATUS } from '../models/EmailAccount.js';
 import { emailProviderRegistry } from '../services/email/EmailProviderRegistry.js';
 import { autoReplyService } from '../services/autoReplyService.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
+import { logger } from '../utils/logger.js';
 
 let pollingWorker = null;
 let autoReplyWorker = null;
@@ -34,7 +35,7 @@ export const processInboxPollingJob = async (job) => {
 
   const settings = account.autoReplySettings || {};
   if (!settings.enabled) {
-    console.log(`[InboxPollingWorker] Auto-reply is disabled on mailbox ${account.emailAddress}. Skipping.`);
+    logger.info('Inbox polling skipped because auto-reply is disabled.', { emailAccountId });
     return { status: 'skipped', reason: 'Auto-reply disabled' };
   }
 
@@ -44,7 +45,7 @@ export const processInboxPollingJob = async (job) => {
   try {
     const listResult = await provider.listMessages({ accessToken, maxResults: 10 });
     const messages = listResult.messages || [];
-    console.log(`[InboxPollingWorker] Found ${messages.length} messages for ${account.emailAddress}`);
+    logger.info('Inbox polling completed.', { emailAccountId, messageCount: messages.length });
 
     let processedCount = 0;
     for (const msgSummary of messages) {
@@ -73,7 +74,7 @@ export const processInboxPollingJob = async (job) => {
 
     return { polled: messages.length, replied: processedCount };
   } catch (err) {
-    console.error(`[InboxPollingWorker] Failed to poll mailbox ${account.emailAddress}:`, err.message);
+    logger.error('Inbox polling failed.', { emailAccountId, errorName: err.name });
     throw err;
   }
 };
@@ -115,4 +116,3 @@ export const stopAutoReplyWorkers = async () => {
   if (autoReplyWorker) await autoReplyWorker.close();
   console.log('📬 Auto-reply inbox workers stopped.');
 };
-

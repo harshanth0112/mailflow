@@ -112,8 +112,31 @@ export const getQueueMetrics = async () => {
   } catch (err) {
     return {
       redisConnected: false,
-      error: err.message,
+      error: 'Queue metrics unavailable',
     };
   }
 };
 
+export const closeQueues = async () => {
+  const queues = [
+    campaignDispatchQueue,
+    campaignSchedulingQueue,
+    automationQueue,
+    inboxPollingQueue,
+    autoReplyDispatchQueue,
+  ].filter(Boolean);
+
+  const results = await Promise.allSettled(queues.map((queue) => queue.close()));
+  campaignDispatchQueue = null;
+  campaignSchedulingQueue = null;
+  automationQueue = null;
+  inboxPollingQueue = null;
+  autoReplyDispatchQueue = null;
+
+  const errors = results
+    .filter((result) => result.status === 'rejected')
+    .map((result) => result.reason);
+  if (errors.length > 0) {
+    throw new AggregateError(errors, 'One or more BullMQ queues failed to close.');
+  }
+};

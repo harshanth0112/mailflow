@@ -24,6 +24,7 @@ export const AuthProvider = ({ children }) => {
   // Sync state and check profile validity on mount
   useEffect(() => {
     const initAuth = async () => {
+      localStorage.removeItem('mailflow_refresh_token');
       const storedToken = localStorage.getItem('mailflow_token');
       if (storedToken) {
         try {
@@ -45,15 +46,12 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await apiLogin({ email, password });
-    const { user: userData, accessToken, refreshToken } = res.data;
+    const { user: userData, accessToken } = res.data;
     
     setUser(userData);
     setToken(accessToken);
     localStorage.setItem('mailflow_user', JSON.stringify(userData));
     localStorage.setItem('mailflow_token', accessToken);
-    if (refreshToken) {
-      localStorage.setItem('mailflow_refresh_token', refreshToken);
-    }
     return userData;
   };
 
@@ -64,8 +62,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      const refreshToken = localStorage.getItem('mailflow_refresh_token');
-      await apiLogout({ refreshToken });
+      await apiLogout({});
     } catch (e) {
       // Ignore network errors during logout
     } finally {
@@ -73,7 +70,6 @@ export const AuthProvider = ({ children }) => {
       setToken(null);
       localStorage.removeItem('mailflow_user');
       localStorage.removeItem('mailflow_token');
-      localStorage.removeItem('mailflow_refresh_token');
     }
   };
 
@@ -123,4 +119,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

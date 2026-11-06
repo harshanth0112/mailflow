@@ -50,7 +50,7 @@ export const auditService = {
         await log.save();
         return log.toObject();
       } catch (err) {
-        console.warn(`[AuditService] Failed to record audit log: ${err.message}`);
+        console.warn(`Audit log persistence failed (${err.name}).`);
         return null;
       }
     } else {
@@ -122,4 +122,3 @@ export const auditService = {
     }
   },
 };
-

@@ -1,12 +1,14 @@
 import mongoose from 'mongoose';
 import { env } from './env.js';
-
-let isConnected = false;
+import { logger } from '../utils/logger.js';
 
 export const connectDatabase = async () => {
   if (!env.MONGODB_URI || env.MONGODB_URI.trim() === '') {
-    console.warn('⚠️  MONGODB_URI is not set. Running in degraded mode without MongoDB.');
-    return;
+    if (env.NODE_ENV === 'production') {
+      throw new Error('MONGODB_URI must be configured before production startup.');
+    }
+    logger.warn('MONGODB_URI is not set; starting in local development mode without MongoDB.');
+    return false;
   }
 
   try {
@@ -16,28 +18,28 @@ export const connectDatabase = async () => {
       minPoolSize: 5,
       socketTimeoutMS: 45000,
     });
-    isConnected = true;
-    console.log(`📦 MongoDB connected: ${conn.connection.host}`);
+    logger.info('MongoDB connection established.');
+    return true;
   } catch (error) {
-    isConnected = false;
-    console.error(`❌ MongoDB connection error: ${error.message}`);
-    console.warn('⚠️  Server will continue running in degraded state.');
+    logger.error('MongoDB connection failed.', { errorName: error.name });
+    if (env.NODE_ENV === 'production') {
+      throw new Error('MongoDB connection failed; production startup aborted.');
+    }
+    logger.warn('Continuing without MongoDB in local development mode.');
+    return false;
   }
 };
 
 mongoose.connection.on('connected', () => {
-  isConnected = true;
-  console.log('📦 Mongoose event: connected');
+  logger.info('MongoDB connection restored.');
 });
 
-mongoose.connection.on('error', (err) => {
-  isConnected = false;
-  console.error(`❌ Mongoose connection event error: ${err.message}`);
+mongoose.connection.on('error', (error) => {
+  logger.error('MongoDB connection event reported an error.', { errorName: error.name });
 });
 
 mongoose.connection.on('disconnected', () => {
-  isConnected = false;
-  console.warn('⚠️  Mongoose event: disconnected');
+  logger.warn('MongoDB connection was lost.');
 });
 
 export const getDbStatus = () => {
@@ -55,7 +57,6 @@ export const getDbStatus = () => {
 export const closeDatabase = async () => {
   if (mongoose.connection.readyState !== 0) {
     await mongoose.connection.close();
-    console.log('📦 MongoDB connection closed gracefully');
+    logger.info('MongoDB connection closed gracefully.');
   }
 };
-

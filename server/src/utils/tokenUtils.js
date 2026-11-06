@@ -63,9 +63,13 @@ export const getRefreshTokenCookieOptions = () => {
   return {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: env.COOKIE_SAME_SITE,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
     path: '/api/v1/auth',
   };
 };
 
+export const getClearRefreshTokenCookieOptions = () => {
+  const { maxAge, ...options } = getRefreshTokenCookieOptions();
+  return options;
+};
