@@ -6,6 +6,7 @@ import { automationService, devAutomations } from './src/services/automationServ
 import { AUTOMATION_STATUS, AUTOMATION_TRIGGER_TYPES, AUTOMATION_ACTION_TYPES } from './src/models/AutomationRule.js';
 import { QUEUE_NAMES, getQueueMetrics } from './src/queues/queueManager.js';
 import { isRedisConnected, closeRedisConnection } from './src/config/redis.js';
+import { campaignController } from './src/controllers/campaignController.js';
 
 async function runPhase9Tests() {
   console.log('--- MAILFLOW PHASE 9: SCHEDULING & AUTOMATION SMOKE TESTS ---');
@@ -100,8 +101,60 @@ async function runPhase9Tests() {
   assert(threwIdor, 'Cross-workspace cancel operation must be rejected');
   console.log('✓ Cross-workspace scheduling actions strictly isolated');
 
-  // Test 7: Automation Rule creation, listing, toggle, and deletion
-  console.log('\n[Test 7] Automation Rule CRUD and Status Management');
+  // Test 7: Scheduling API controller validation and action wiring
+  console.log('\n[Test 7] Scheduling API controller actions');
+  const apiCampaignId = new mongoose.Types.ObjectId().toString();
+  devCampaigns.set(apiCampaignId, {
+    _id: apiCampaignId,
+    workspaceId,
+    createdBy: userId,
+    name: 'Controller Scheduling Test',
+    subject: 'Controller test',
+    senderEmailAccountId: emailAccountId,
+    recipientConfiguration: { type: RECIPIENT_SELECTION_TYPE.ALL_ELIGIBLE },
+    status: CAMPAIGN_STATUS.DRAFT,
+  });
+  const invokeController = async (handler, body = {}) => {
+    const response = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.payload = payload;
+        return this;
+      },
+    };
+    await handler(
+      { body, params: { id: apiCampaignId }, workspace: { _id: workspaceId } },
+      response
+    );
+    return response;
+  };
+  const apiSchedule = await invokeController(campaignController.scheduleCampaign, {
+    scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+    timezone: 'UTC',
+  });
+  assert.strictEqual(apiSchedule.statusCode, 200);
+  assert.strictEqual(apiSchedule.payload.data.status, CAMPAIGN_STATUS.SCHEDULED);
+  const apiReschedule = await invokeController(campaignController.rescheduleCampaign, {
+    scheduledAt: new Date(Date.now() + 172800000).toISOString(),
+    timezone: 'America/Los_Angeles',
+  });
+  assert.strictEqual(apiReschedule.statusCode, 200);
+  assert.strictEqual(apiReschedule.payload.data.timezone, 'America/Los_Angeles');
+  const apiCancel = await invokeController(campaignController.cancelCampaign);
+  assert.strictEqual(apiCancel.statusCode, 200);
+  assert.strictEqual(apiCancel.payload.data.status, CAMPAIGN_STATUS.CANCELLED);
+  const invalidSchedule = await invokeController(campaignController.scheduleCampaign, {
+    scheduledAt: 'not-a-date',
+  });
+  assert.strictEqual(invalidSchedule.statusCode, 400);
+  console.log('✓ Schedule, reschedule, cancel, and invalid input API checks passed');
+
+  // Test 8: Automation Rule creation, listing, toggle, and deletion
+  console.log('\n[Test 8] Automation Rule CRUD and Status Management');
   const createdAuto = await automationService.createAutomation({
     workspaceId,
     userId,
@@ -175,4 +228,3 @@ runPhase9Tests()
     await closeRedisConnection();
     process.exit(1);
   });
-

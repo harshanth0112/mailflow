@@ -2,8 +2,11 @@ import mongoose from 'mongoose';
 import { AutoReplyRule, MATCH_TYPES } from '../models/AutoReplyRule.js';
 import { ActivityLog, LOG_STATUS } from '../models/ActivityLog.js';
 import { EmailAccount, CONNECTION_STATUS } from '../models/EmailAccount.js';
+import { Contact } from '../models/Contact.js';
 import { emailProviderRegistry } from './email/EmailProviderRegistry.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
+import { devContacts } from './contactService.js';
+import { escapeHtml, personalizeContent } from '../utils/templatePersonalizer.js';
 
 // In-memory fallback map for dev mode
 export const devAutoReplyRules = new Map();
@@ -324,7 +327,7 @@ export const autoReplyService = {
         message.subject || ''
       );
       replyBody = matchedRule.replyTemplate?.body || '';
-      replyHtml = matchedRule.replyTemplate?.htmlBody || `<p>${replyBody.replace(/\n/g, '<br/>')}</p>`;
+      replyHtml = matchedRule.replyTemplate?.htmlBody || `<p>${escapeHtml(replyBody).replace(/\n/g, '<br/>')}</p>`;
     } else {
       // Default reply
       replySubject = (settings.defaultReplySubject || 'Re: {{subject}}').replace(
@@ -332,8 +335,37 @@ export const autoReplyService = {
         message.subject || ''
       );
       replyBody = settings.defaultReplyBody || 'Hello,\n\nThank you for contacting us. We have received your email.';
-      replyHtml = `<p>${replyBody.replace(/\n/g, '<br/>')}</p>`;
+      replyHtml = `<p>${escapeHtml(replyBody).replace(/\n/g, '<br/>')}</p>`;
     }
+
+    const senderMatch = String(message.from || '').match(/<([^>]+)>/);
+    const senderAddress = (senderMatch ? senderMatch[1] : message.from || '').trim().toLowerCase();
+    let contact = { email: senderAddress };
+    if (senderAddress) {
+      if (mongoose.connection.readyState === 1) {
+        contact = (await Contact.findOne({ workspaceId, email: senderAddress })
+          .select('firstName lastName email company jobTitle')
+          .lean()) || contact;
+      } else {
+        contact = Array.from(devContacts.values()).find(
+          (entry) =>
+            entry.workspaceId.toString() === workspaceId.toString() &&
+            entry.email.toLowerCase() === senderAddress
+        ) || contact;
+      }
+    }
+
+    const subjectValue = message.subject || '';
+    replySubject = personalizeContent({
+      content: replySubject.replace(/\{\{\s*subject\s*\}\}/g, subjectValue),
+      contact,
+    });
+    replyBody = personalizeContent({ content: replyBody, contact });
+    replyHtml = personalizeContent({
+      content: replyHtml.replace(/\{\{\s*subject\s*\}\}/g, escapeHtml(subjectValue)),
+      contact,
+      isHtml: true,
+    });
 
     // Create Initial ActivityLog
     const logData = {
@@ -370,6 +402,8 @@ export const autoReplyService = {
           from: account.emailAddress,
           subject: replySubject,
           body: replyBody,
+          html: replyHtml,
+          text: replyBody,
         });
       } else {
         const provider = emailProviderRegistry.get(account.provider);

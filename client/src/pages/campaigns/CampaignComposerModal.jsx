@@ -4,6 +4,7 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import {
   X,
+  Clock,
   Mail,
   Users,
   Eye,
@@ -20,6 +21,28 @@ import {
 } from 'lucide-react';
 import { previewAudience, sendCampaignTestEmail } from '../../services/api';
 
+const createInitialFormData = (campaign, senderAccounts) => ({
+  name: campaign?.name || '',
+  subject: campaign?.subject || '',
+  previewText: campaign?.previewText || '',
+  senderEmailAccountId:
+    campaign?.senderEmailAccountId?._id ||
+    campaign?.senderEmailAccountId ||
+    (senderAccounts[0]?._id || ''),
+  senderName: campaign?.senderName || '',
+  replyTo: campaign?.replyTo || '',
+  recipientType: campaign?.recipientConfiguration?.type || 'all_eligible',
+  groupIds: campaign?.recipientConfiguration?.groupIds || [],
+  tags: campaign?.recipientConfiguration?.tags ? campaign.recipientConfiguration.tags.join(', ') : '',
+  htmlContent:
+    campaign?.htmlContent ||
+    '<div style="font-family: sans-serif; line-height: 1.6; color: #1e293b;">\n  <h2>Hello {{firstName}},</h2>\n  <p>We are thrilled to share our latest product updates with {{company}}!</p>\n  <p>Let us know if you have any questions.</p>\n  <p>Best regards,<br/>The MailFlow Team</p>\n</div>',
+  textContent:
+    campaign?.textContent ||
+    'Hello {{firstName}},\n\nWe are thrilled to share our latest product updates with {{company}}!\n\nBest regards,\nThe MailFlow Team',
+  templateId: campaign?.templateId || '',
+});
+
 export const CampaignComposerModal = ({
   isOpen,
   onClose,
@@ -28,9 +51,9 @@ export const CampaignComposerModal = ({
   campaign = null,
   senderAccounts = [],
   groups = [],
+  templates = [],
+  onSchedule,
 }) => {
-  if (!isOpen) return null;
-
   const isEdit = Boolean(campaign && campaign._id);
 
   const [step, setStep] = useState(1); // 1: Setup & Sender, 2: Audience, 3: Content & Personalization, 4: Preview & Confirm
@@ -39,26 +62,7 @@ export const CampaignComposerModal = ({
   const [success, setSuccess] = useState('');
 
   // Form State
-  const [formData, setFormData] = useState({
-    name: campaign?.name || '',
-    subject: campaign?.subject || '',
-    previewText: campaign?.previewText || '',
-    senderEmailAccountId:
-      campaign?.senderEmailAccountId?._id ||
-      campaign?.senderEmailAccountId ||
-      (senderAccounts[0]?._id || ''),
-    senderName: campaign?.senderName || '',
-    replyTo: campaign?.replyTo || '',
-    recipientType: campaign?.recipientConfiguration?.type || 'all_eligible',
-    groupIds: campaign?.recipientConfiguration?.groupIds || [],
-    tags: campaign?.recipientConfiguration?.tags ? campaign.recipientConfiguration.tags.join(', ') : '',
-    htmlContent:
-      campaign?.htmlContent ||
-      '<div style="font-family: sans-serif; line-height: 1.6; color: #1e293b;">\n  <h2>Hello {{firstName}},</h2>\n  <p>We are thrilled to share our latest product updates with {{company}}!</p>\n  <p>Let us know if you have any questions.</p>\n  <p>Best regards,<br/>The MailFlow Team</p>\n</div>',
-    textContent:
-      campaign?.textContent ||
-      'Hello {{firstName}},\n\nWe are thrilled to share our latest product updates with {{company}}!\n\nBest regards,\nThe MailFlow Team',
-  });
+  const [formData, setFormData] = useState(() => createInitialFormData(campaign, senderAccounts));
 
   // Audience Count Preview State
   const [audienceLoading, setAudienceLoading] = useState(false);
@@ -70,11 +74,13 @@ export const CampaignComposerModal = ({
   // Test Email State
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
 
   // Fetch Audience preview when configuration changes
   useEffect(() => {
     let isMounted = true;
     const fetchAudience = async () => {
+      if (!isOpen) return;
       setAudienceLoading(true);
       try {
         const payload = {
@@ -97,7 +103,19 @@ export const CampaignComposerModal = ({
     return () => {
       isMounted = false;
     };
-  }, [formData.recipientType, formData.groupIds, formData.tags]);
+  }, [isOpen, formData.recipientType, formData.groupIds, formData.tags]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setFormData(createInitialFormData(campaign, senderAccounts));
+    setStep(1);
+    setAudienceCount(campaign?.recipientConfiguration?.estimatedCount || 0);
+    setPreviewDevice('desktop');
+    setScheduleAt('');
+    setTestEmailRecipient('');
+    setError('');
+    setSuccess('');
+  }, [isOpen, campaign?._id]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -124,6 +142,21 @@ export const CampaignComposerModal = ({
     }));
   };
 
+  const handleApplyTemplate = (templateId) => {
+    const template = templates.find((item) => item._id === templateId);
+    setFormData((prev) => ({
+      ...prev,
+      templateId,
+      ...(template
+        ? {
+            subject: template.subject || prev.subject,
+            htmlContent: template.htmlContent || prev.htmlContent,
+            textContent: template.textContent || prev.textContent,
+          }
+        : {}),
+    }));
+  };
+
   const buildPayload = () => {
     return {
       name: formData.name.trim(),
@@ -134,6 +167,7 @@ export const CampaignComposerModal = ({
       replyTo: formData.replyTo.trim(),
       htmlContent: formData.htmlContent,
       textContent: formData.textContent,
+      templateId: formData.templateId || null,
       recipientConfiguration: {
         type: formData.recipientType,
         groupIds: formData.groupIds,
@@ -192,6 +226,39 @@ export const CampaignComposerModal = ({
     }
   };
 
+  const handleSchedule = async () => {
+    if (!formData.senderEmailAccountId) {
+      setError('Please select a sender email account before scheduling.');
+      setStep(1);
+      return;
+    }
+    if (audienceCount === 0) {
+      setError('Cannot schedule a campaign with 0 eligible opted-in recipients.');
+      setStep(2);
+      return;
+    }
+    const scheduledDate = new Date(scheduleAt);
+    if (!scheduleAt || Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+      setError('Choose a send time in the future.');
+      return;
+    }
+
+    setError('');
+    setSubmitting(true);
+    try {
+      const saved = await onSave(buildPayload(), campaign?._id);
+      await onSchedule(saved._id || campaign?._id, {
+        scheduledAt: scheduledDate.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      });
+      onClose();
+    } catch (scheduleError) {
+      setError(scheduleError.message || 'Failed to schedule campaign');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSendTest = async (e) => {
     e.preventDefault();
     if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
@@ -227,6 +294,8 @@ export const CampaignComposerModal = ({
     .replace(/\{\{\s*lastName\s*\}\}/g, 'Connor')
     .replace(/\{\{\s*email\s*\}\}/g, 'sarah.connor@example.com')
     .replace(/\{\{\s*company\s*\}\}/g, 'Cyberdyne Systems');
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-150">
@@ -516,6 +585,20 @@ export const CampaignComposerModal = ({
           {/* STEP 3: Content & Personalization */}
           {step === 3 && (
             <div className="space-y-4">
+              {templates.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-xl border border-teal-500/20 bg-teal-500/[0.04] p-3 sm:flex-row sm:items-center">
+                  <label htmlFor="campaign-template" className="text-xs font-mono uppercase text-teal-300">Start from template</label>
+                  <select
+                    id="campaign-template"
+                    value={formData.templateId}
+                    onChange={(event) => handleApplyTemplate(event.target.value)}
+                    className="flex-1 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-200 outline-none focus:border-teal-500"
+                  >
+                    <option value="">Keep current content</option>
+                    {templates.map((template) => <option key={template._id} value={template._id}>{template.name}</option>)}
+                  </select>
+                </div>
+              )}
               {/* Placeholders Toolbar */}
               <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-slate-950/80 border border-slate-800">
                 <span className="text-xs font-mono uppercase text-slate-400 flex items-center gap-1 mr-1">
@@ -651,6 +734,26 @@ export const CampaignComposerModal = ({
                 </form>
               </div>
 
+              {/* Schedule */}
+              <div className="rounded-xl border border-orange-500/20 bg-orange-500/[0.04] p-4">
+                <label htmlFor="campaign-schedule-at" className="mb-2 block text-xs font-mono uppercase text-orange-300">Or schedule for later</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="campaign-schedule-at"
+                    type="datetime-local"
+                    min={(() => {
+                      const minDate = new Date(Date.now() + 60000);
+                      return new Date(minDate.getTime() - minDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                    })()}
+                    value={scheduleAt}
+                    onChange={(event) => setScheduleAt(event.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-400"
+                  />
+                  <span className="self-center text-[11px] text-slate-500">{Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local timezone'}</span>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-500">The campaign is saved first, then added to the scheduled delivery queue.</p>
+              </div>
+
               {/* Summary Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                 <div className="p-3 rounded-lg bg-slate-950/40 border border-slate-800">
@@ -666,9 +769,9 @@ export const CampaignComposerModal = ({
                   </span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-950/40 border border-slate-800 col-span-2 sm:col-span-1">
-                  <span className="text-slate-500 block">Status Upon Launch</span>
+                  <span className="text-slate-500 block">Send-now action</span>
                   <span className="text-indigo-400 font-bold text-sm mt-0.5 block">
-                    QUEUED (Job Worker Ready)
+                    Queue campaign now
                   </span>
                 </div>
               </div>
@@ -712,15 +815,27 @@ export const CampaignComposerModal = ({
                 Next <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSendNow}
-                isLoading={submitting}
-                className="text-xs bg-emerald-600 hover:bg-emerald-500"
-              >
-                <Send className="w-3.5 h-3.5 mr-1.5" /> Queue & Send Campaign
-              </Button>
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSchedule}
+                  isLoading={submitting}
+                  disabled={!scheduleAt || !onSchedule}
+                  className="text-xs bg-orange-500 text-slate-950 hover:bg-orange-400"
+                >
+                  <Clock className="w-3.5 h-3.5 mr-1.5" /> Schedule
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSendNow}
+                  isLoading={submitting}
+                  className="text-xs bg-emerald-600 hover:bg-emerald-500"
+                >
+                  <Send className="w-3.5 h-3.5 mr-1.5" /> Queue & Send Campaign
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -728,4 +843,3 @@ export const CampaignComposerModal = ({
     </div>
   );
 };
-

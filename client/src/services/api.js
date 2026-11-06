@@ -176,6 +176,12 @@ export const rescheduleCampaign = (id, data) => api.post(`/campaigns/${id}/resch
 export const cancelCampaign = (id) => api.post(`/campaigns/${id}/cancel`);
 export const getCampaignRecipients = (id, params) => api.get(`/campaigns/${id}/recipients`, { params });
 
+// Reusable email templates
+export const getEmailTemplates = (params) => api.get('/templates', { params });
+export const createEmailTemplate = (data) => api.post('/templates', data);
+export const updateEmailTemplate = (id, data) => api.patch(`/templates/${id}`, data);
+export const deleteEmailTemplate = (id) => api.delete(`/templates/${id}`);
+
 // Automation endpoints
 export const getAutomations = (params) => api.get('/automations', { params });
 export const getAutomationById = (id) => api.get(`/automations/${id}`);

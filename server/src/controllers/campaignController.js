@@ -4,6 +4,7 @@ import {
   campaignUpdateSchema,
   campaignQuerySchema,
   campaignTestEmailSchema,
+  campaignScheduleSchema,
   recipientConfigSchema,
 } from '../validators/campaignValidators.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
@@ -202,6 +203,52 @@ export const campaignController = {
     }
   },
 
+  async scheduleCampaign(req, res) {
+    const validation = campaignScheduleSchema.safeParse(req.body);
+    if (!validation.success) {
+      return sendError(res, 400, 'Validation failed', validation.error.flatten().fieldErrors);
+    }
+    try {
+      const campaign = await campaignService.scheduleCampaign({
+        workspaceId: req.workspace._id,
+        campaignId: req.params.id,
+        ...validation.data,
+      });
+      return sendSuccess(res, 200, 'Campaign scheduled successfully', campaign);
+    } catch (error) {
+      return sendError(res, error.statusCode || (error.message.includes('not found') ? 404 : 400), error.message || 'Failed to schedule campaign');
+    }
+  },
+
+  async rescheduleCampaign(req, res) {
+    const validation = campaignScheduleSchema.safeParse(req.body);
+    if (!validation.success) {
+      return sendError(res, 400, 'Validation failed', validation.error.flatten().fieldErrors);
+    }
+    try {
+      const campaign = await campaignService.rescheduleCampaign({
+        workspaceId: req.workspace._id,
+        campaignId: req.params.id,
+        ...validation.data,
+      });
+      return sendSuccess(res, 200, 'Campaign rescheduled successfully', campaign);
+    } catch (error) {
+      return sendError(res, error.statusCode || (error.message.includes('not found') ? 404 : 400), error.message || 'Failed to reschedule campaign');
+    }
+  },
+
+  async cancelCampaign(req, res) {
+    try {
+      const result = await campaignService.cancelCampaign({
+        workspaceId: req.workspace._id,
+        campaignId: req.params.id,
+      });
+      return sendSuccess(res, 200, 'Campaign cancelled successfully', result);
+    } catch (error) {
+      return sendError(res, error.statusCode || (error.message.includes('not found') ? 404 : 400), error.message || 'Failed to cancel campaign');
+    }
+  },
+
   /**
    * GET /api/v1/campaigns/:id/recipients
    * List recipient records
@@ -230,4 +277,3 @@ export const campaignController = {
     }
   },
 };
-

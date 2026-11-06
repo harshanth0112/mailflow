@@ -59,6 +59,21 @@ router.post(
   requireWorkspacePermission(PERMISSIONS.CAMPAIGNS_SEND),
   campaignController.sendCampaign
 );
+router.post(
+  '/:id/schedule',
+  requireWorkspacePermission(PERMISSIONS.CAMPAIGNS_SEND),
+  campaignController.scheduleCampaign
+);
+router.post(
+  '/:id/reschedule',
+  requireWorkspacePermission(PERMISSIONS.CAMPAIGNS_SEND),
+  campaignController.rescheduleCampaign
+);
+router.post(
+  '/:id/cancel',
+  requireWorkspacePermission(PERMISSIONS.CAMPAIGNS_SEND),
+  campaignController.cancelCampaign
+);
 
 // Recipient delivery audit
 router.get(
@@ -68,4 +83,3 @@ router.get(
 );
 
 export default router;
-

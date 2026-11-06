@@ -7,8 +7,10 @@ import {
   deleteCampaign,
   duplicateCampaign,
   sendCampaign,
+  scheduleCampaign,
   getConnectedEmailAccounts,
   getContactGroups,
+  getEmailTemplates,
 } from '../../services/api';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -40,6 +42,7 @@ export const CampaignsPage = () => {
   const [campaigns, setCampaigns] = useState([]);
   const [senderAccounts, setSenderAccounts] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 15, total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -82,12 +85,14 @@ export const CampaignsPage = () => {
 
   const loadSupportingData = useCallback(async () => {
     try {
-      const [accRes, grpRes] = await Promise.all([
+      const [accRes, grpRes, templateRes] = await Promise.all([
         getConnectedEmailAccounts().catch(() => ({ data: [] })),
         getContactGroups().catch(() => ({ data: [] })),
+        getEmailTemplates({ limit: 100 }).catch(() => ({ data: [] })),
       ]);
       setSenderAccounts(accRes.data || []);
       setGroups(grpRes.data || []);
+      setTemplates(templateRes.data || []);
     } catch (err) {
       console.error('Failed to load supporting data for campaigns:', err);
     }
@@ -122,6 +127,17 @@ export const CampaignsPage = () => {
       fetchCampaigns();
     } catch (err) {
       setError(err.message || 'Failed to trigger campaign send');
+    }
+  };
+
+  const handleScheduleCampaign = async (campaignId, schedule) => {
+    try {
+      await scheduleCampaign(campaignId, schedule);
+      setSuccessMessage('Campaign scheduled successfully.');
+      fetchCampaigns();
+    } catch (err) {
+      setError(err.message || 'Failed to schedule campaign');
+      throw err;
     }
   };
 
@@ -439,6 +455,8 @@ export const CampaignsPage = () => {
         campaign={editingCampaign}
         senderAccounts={senderAccounts}
         groups={groups}
+        templates={templates}
+        onSchedule={handleScheduleCampaign}
       />
 
       {/* Inspection Drawer */}

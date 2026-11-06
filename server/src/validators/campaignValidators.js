@@ -48,3 +48,8 @@ export const campaignTestEmailSchema = z.object({
     .email('Valid recipient email address is required')
     .transform((val) => val.trim().toLowerCase()),
 });
+
+export const campaignScheduleSchema = z.object({
+  scheduledAt: z.string().datetime({ offset: true }),
+  timezone: z.string().min(1).max(100).optional().default('UTC'),
+});

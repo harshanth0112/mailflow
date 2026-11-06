@@ -32,6 +32,7 @@ import {
   updateAutoReplySettings,
   getAutoReplyLogs,
   simulateIncomingMessage,
+  getEmailTemplates,
 } from '../../services/api';
 
 export const AutoReplyPage = () => {
@@ -40,6 +41,7 @@ export const AutoReplyPage = () => {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [rules, setRules] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [emailTemplates, setEmailTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
@@ -59,6 +61,7 @@ export const AutoReplyPage = () => {
     senderBlacklist: '',
     replySubject: 'Re: {{subject}}',
     replyBody: '',
+    replyHtmlBody: '',
   });
 
   // Settings State for selected account
@@ -79,9 +82,13 @@ export const AutoReplyPage = () => {
 
   const loadAccounts = async () => {
     try {
-      const res = await getConnectedEmailAccounts();
+      const [res, templatesRes] = await Promise.all([
+        getConnectedEmailAccounts(),
+        getEmailTemplates({ limit: 100 }),
+      ]);
       const accs = res.data || [];
       setAccounts(accs);
+      setEmailTemplates(templatesRes.data || []);
       if (accs.length > 0 && !selectedAccountId) {
         setSelectedAccountId(accs[0]._id);
       }
@@ -145,6 +152,7 @@ export const AutoReplyPage = () => {
         senderBlacklist: (rule.conditions?.senderBlacklist || []).join(', '),
         replySubject: rule.replyTemplate?.subject || 'Re: {{subject}}',
         replyBody: rule.replyTemplate?.body || '',
+        replyHtmlBody: rule.replyTemplate?.htmlBody || '',
       });
     } else {
       setRuleFormData({
@@ -158,6 +166,7 @@ export const AutoReplyPage = () => {
         senderBlacklist: '',
         replySubject: 'Re: {{subject}}',
         replyBody: '',
+        replyHtmlBody: '',
       });
     }
     setShowRuleModal(true);
@@ -187,6 +196,7 @@ export const AutoReplyPage = () => {
         replyTemplate: {
           subject: ruleFormData.replySubject.trim(),
           body: ruleFormData.replyBody.trim(),
+          htmlBody: ruleFormData.replyHtmlBody,
         },
       };
 
@@ -775,6 +785,29 @@ export const AutoReplyPage = () => {
                         onChange={(e) => setRuleFormData({ ...ruleFormData, replySubject: e.target.value })}
                       />
                     </div>
+                    {emailTemplates.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-mono text-slate-400 mb-1">Use saved email template</label>
+                        <select
+                          defaultValue=""
+                          onChange={(event) => {
+                            const template = emailTemplates.find((item) => item._id === event.target.value);
+                            if (template) {
+                              setRuleFormData((current) => ({
+                                ...current,
+                                replySubject: template.subject || current.replySubject,
+                                replyBody: template.textContent || template.htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || current.replyBody,
+                                replyHtmlBody: template.htmlContent || current.replyHtmlBody,
+                              }));
+                            }
+                          }}
+                          className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-200"
+                        >
+                          <option value="">Choose a template…</option>
+                          {emailTemplates.map((template) => <option key={template._id} value={template._id}>{template.name}</option>)}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-[11px] font-mono text-slate-400 mb-1">Reply Message</label>
                       <textarea

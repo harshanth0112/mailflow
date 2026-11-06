@@ -6,6 +6,7 @@ import { contactService, devContacts } from './src/services/contactService.js';
 import { CONSENT_STATUS, CONTACT_STATUS } from './src/models/Contact.js';
 import { devEmailAccounts } from './src/services/emailAccountService.js';
 import { encryptToken } from './src/utils/cryptoUtils.js';
+import { templateService, devEmailTemplates } from './src/services/templateService.js';
 
 async function runCampaignSmokeTest() {
   console.log('--- Starting Phase 8 Campaign Management System Smoke Test ---');
@@ -208,6 +209,64 @@ async function runCampaignSmokeTest() {
     process.exit(1);
   }
 
+  console.log('12. Testing reusable email template CRUD and workspace isolation...');
+  const savedTemplate = await templateService.create({
+    workspaceId,
+    userId,
+    data: {
+      name: 'Welcome Note',
+      description: 'First-touch campaign and auto-reply content',
+      subject: 'Welcome {{firstName}}',
+      htmlContent: '<p>Hello {{firstName}}</p>',
+      textContent: 'Hello {{firstName}}',
+    },
+  });
+  const listedTemplates = await templateService.list({
+    workspaceId,
+    query: { page: 1, limit: 20, search: '' },
+  });
+  if (listedTemplates.templates.length !== 1 || listedTemplates.templates[0]._id !== savedTemplate._id) {
+    console.error('FAIL: Workspace template listing returned unexpected results');
+    process.exit(1);
+  }
+  const foreignTemplates = await templateService.list({
+    workspaceId: otherWorkspaceId,
+    query: { page: 1, limit: 20, search: '' },
+  });
+  if (foreignTemplates.templates.length !== 0) {
+    console.error('FAIL: Template was visible outside its workspace');
+    process.exit(1);
+  }
+  const updatedTemplate = await templateService.update({
+    workspaceId,
+    templateId: savedTemplate._id,
+    data: { subject: 'Updated {{firstName}}' },
+  });
+  if (updatedTemplate.subject !== 'Updated {{firstName}}') {
+    console.error('FAIL: Template update failed');
+    process.exit(1);
+  }
+  let blockedForeignUpdate = false;
+  try {
+    await templateService.update({
+      workspaceId: otherWorkspaceId,
+      templateId: savedTemplate._id,
+      data: { name: 'Cross-workspace' },
+    });
+  } catch {
+    blockedForeignUpdate = true;
+  }
+  if (!blockedForeignUpdate) {
+    console.error('FAIL: Cross-workspace template update was not blocked');
+    process.exit(1);
+  }
+  await templateService.delete({ workspaceId, templateId: savedTemplate._id });
+  if (devEmailTemplates.has(savedTemplate._id)) {
+    console.error('FAIL: Template delete failed');
+    process.exit(1);
+  }
+  console.log('SUCCESS: Template CRUD and workspace isolation verified.');
+
   console.log('--- ALL PHASE 8 CAMPAIGN MANAGEMENT TESTS PASSED CLEANLY ---');
   process.exit(0);
 }
@@ -216,4 +275,3 @@ runCampaignSmokeTest().catch((err) => {
   console.error('Error during test execution:', err);
   process.exit(1);
 });
-

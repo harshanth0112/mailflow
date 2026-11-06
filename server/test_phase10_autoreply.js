@@ -6,6 +6,7 @@ import { CONNECTION_STATUS } from './src/models/EmailAccount.js';
 import { MATCH_TYPES } from './src/models/AutoReplyRule.js';
 import { LOG_STATUS } from './src/models/ActivityLog.js';
 import { emailProviderRegistry } from './src/services/email/EmailProviderRegistry.js';
+import { devContacts } from './src/services/contactService.js';
 
 async function runPhase10Tests() {
   console.log('--- MAILFLOW PHASE 10: AUTOMATIC REPLIES SMOKE TESTS ---');
@@ -13,6 +14,13 @@ async function runPhase10Tests() {
   const workspaceId = new mongoose.Types.ObjectId().toString();
   const userId = new mongoose.Types.ObjectId().toString();
   const emailAccountId = new mongoose.Types.ObjectId().toString();
+  devContacts.set(new mongoose.Types.ObjectId().toString(), {
+    workspaceId,
+    email: 'alice@client.com',
+    firstName: 'Alicia',
+    lastName: 'Jones',
+    company: 'Acme <Systems>',
+  });
 
   // Test 1: Setup connected EmailAccount with AutoReply enabled
   console.log('\n[Test 1] Setting up connected mailbox with auto-reply configuration');
@@ -52,7 +60,8 @@ async function runPhase10Tests() {
       },
       replyTemplate: {
         subject: 'Re: {{subject}} - Plans & Pricing',
-        body: 'Here is our pricing: Starter is $29/mo, Pro is $99/mo.',
+        body: 'Hello {{firstName}} from {{company}}. Here is our pricing: Starter is $29/mo, Pro is $99/mo.',
+        htmlBody: '<p>Hello {{firstName}} from {{company}}.</p>',
       },
     },
   });
@@ -106,6 +115,9 @@ async function runPhase10Tests() {
   assert.strictEqual(res1.ruleName, 'Pricing Inquiry Response');
   assert(res1.replySubject.includes('Plans & Pricing'));
   assert.strictEqual(mockSentList.length, 1);
+  assert(mockSentList[0].text.includes('Hello Alicia from Acme <Systems>.'));
+  assert(mockSentList[0].html.includes('Acme &lt;Systems&gt;'));
+  assert(!mockSentList[0].html.includes('<Systems>'));
   console.log('✓ High-priority Pricing rule matched and replied');
 
   // Test 4: Safeguard — Prevent duplicate replies to the same message
@@ -243,4 +255,3 @@ runPhase10Tests()
     console.error('Phase 10 test failed:', err);
     process.exit(1);
   });
-

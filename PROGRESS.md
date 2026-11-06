@@ -361,6 +361,9 @@ This document tracks chronological milestones, architecture choices, and impleme
   - Delivery States: `pending`, `sent`, `delivered`, `bounced`, `failed`, `skipped_ineligible`.
   - Diagnostic Tracking: `providerMessageId`, `errorCode`, `errorMessage`, `sentAt`, `deliveredAt`.
   - Compound unique constraint `{ campaignId: 1, email: 1 }` preventing duplicate recipient entries.
+- **`EmailTemplate` Model (`server/src/models/EmailTemplate.js`):**
+  - Workspace-scoped reusable templates with name, description, subject, HTML, and plain-text content.
+  - CRUD API under `/api/v1/templates` protected by workspace permissions.
 
 ### 2. Strict Recipient Eligibility & Anti-Spam Compliance
 - **Compliance Rules (`server/src/services/campaignService.js`):**
@@ -376,11 +379,11 @@ This document tracks chronological milestones, architecture choices, and impleme
   - Supports placeholder interpolation: `{{firstName}}`, `{{lastName}}`, `{{email}}`, `{{company}}`, `{{jobTitle}}`.
   - Safe HTML escaping: replaces characters (`&`, `<`, `>`, `"`, `'`) in untrusted contact attributes to prevent XSS.
 
-### 4. Sending & Queue Architecture (Phase 9 Bridge)
+### 4. Sending & Queue Architecture
 - Provider abstraction integration (`GmailProvider`, Nodemailer OAuth2).
 - Pre-dispatch recipient record generation ensuring persistence before network activity.
 - Test email action personalizing content with sample user data for desktop/mobile inspection.
-- Clean handoff ready for BullMQ / Redis background workers in Phase 9.
+- BullMQ / Redis background worker integration for immediate and scheduled delivery.
 
 ### 5. API Endpoints (`/api/v1/campaigns/...`)
 | Method | Endpoint | Description | Protection / Validation |
@@ -394,7 +397,14 @@ This document tracks chronological milestones, architecture choices, and impleme
 | `POST` | `/api/v1/campaigns/preview-audience` | Live calculation of eligible recipients | `requireAuth`, `requireWorkspace`, `campaigns:read`, Zod |
 | `POST` | `/api/v1/campaigns/:id/test-email` | Send personalized test email to operator | `requireAuth`, `requireWorkspace`, `campaigns:update`, Zod |
 | `POST` | `/api/v1/campaigns/:id/send` | Initialize recipients and queue campaign | `requireAuth`, `requireWorkspace`, `campaigns:send` |
+| `POST` | `/api/v1/campaigns/:id/schedule` | Schedule a draft campaign for a future time | `requireAuth`, `requireWorkspace`, `campaigns:send`, Zod |
+| `POST` | `/api/v1/campaigns/:id/reschedule` | Change a scheduled campaign's delivery time | `requireAuth`, `requireWorkspace`, `campaigns:send`, Zod |
+| `POST` | `/api/v1/campaigns/:id/cancel` | Cancel a scheduled or queued campaign | `requireAuth`, `requireWorkspace`, `campaigns:send` |
 | `GET` | `/api/v1/campaigns/:id/recipients` | Audit individual recipient delivery logs | `requireAuth`, `requireWorkspace`, `campaigns:read` |
+| `GET` | `/api/v1/templates` | Search and list workspace email templates | `requireAuth`, `requireWorkspace`, `campaigns:read`, Zod |
+| `POST` | `/api/v1/templates` | Create a reusable email template | `requireAuth`, `requireWorkspace`, `campaigns:create`, Zod |
+| `PATCH` | `/api/v1/templates/:id` | Update a reusable email template | `requireAuth`, `requireWorkspace`, `campaigns:update`, Zod |
+| `DELETE` | `/api/v1/templates/:id` | Delete a reusable email template | `requireAuth`, `requireWorkspace`, `campaigns:delete` |
 
 ### 6. Frontend Implementation
 - **`CampaignsPage.jsx` (`client/src/pages/campaigns/CampaignsPage.jsx`):**
@@ -403,8 +413,10 @@ This document tracks chronological milestones, architecture choices, and impleme
   - 4-step campaign authoring wizard:
     1. Details, subject, and sender account selection.
     2. Dynamic audience segmentation with live eligible recipient calculation.
-    3. Content editor with placeholder insertion tags and plain-text fallback.
-    4. Preview screen with desktop/mobile view toggles, test-email sender, and send confirmation.
+    3. Content editor with reusable template selection, placeholder insertion tags, and plain-text fallback.
+    4. Preview screen with desktop/mobile view toggles, test-email sender, immediate send, and scheduled send.
+- **`TemplatesPage.jsx`:** Workspace template library with CRUD, variable insertion, and sandboxed personalized HTML preview; templates can be selected in campaign and auto-reply editors.
+- **`ScheduledPage.jsx`:** Upcoming campaign queue with local-time display, reschedule, cancellation, and worker availability guidance.
 - **`CampaignDetailDrawer.jsx` (`client/src/pages/campaigns/CampaignDetailDrawer.jsx`):**
   - Inspection drawer displaying campaign metrics, sender details, and individual recipient status logs.
 
@@ -420,8 +432,18 @@ This document tracks chronological milestones, architecture choices, and impleme
   - Campaign send trigger and initial recipient record generation (passed).
   - Duplicate send rejection via idempotency protection (passed).
   - Recipient delivery records query (passed).
+  - Reusable template create, list, update, delete, and cross-workspace isolation checks.
 - **Regression tests:** Phase 6 (`server/test_phase6_contacts.js`) and Phase 7 (`server/test_phase7_email.js`) passed 100%.
 - **Frontend build test:** Production build (`vite build`) compiled successfully with 0 errors (`1693 modules transformed`).
+
+---
+
+## Phase 9 — Campaign Scheduling (Completed)
+
+- Added authenticated schedule, reschedule, and cancel campaign API actions, scoped to the active workspace and send permission.
+- Scheduling accepts only future ISO timestamps, records the selected timezone, and delegates delayed delivery to BullMQ; production scheduling remains unavailable until the queue worker is ready.
+- Campaign composition supports scheduling after saving the draft. The Scheduled Campaigns page lists upcoming sends and supports rescheduling and cancellation.
+- `server/test_phase9_scheduling.js` covers future-time validation, rescheduling, cancellation, and cross-workspace isolation. Full queue dispatch requires a reachable Redis service and worker.
 
 
 
