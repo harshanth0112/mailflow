@@ -12,8 +12,8 @@ export const contactCreateSchema = z.object({
   phone: z.string().max(50, 'Phone cannot exceed 50 characters').optional().default(''),
   company: z.string().max(150, 'Company cannot exceed 150 characters').optional().default(''),
   jobTitle: z.string().max(150, 'Job title cannot exceed 150 characters').optional().default(''),
-  tags: z.array(z.string().trim().max(50)).optional().default([]),
-  groups: z.array(z.string()).optional().default([]),
+  tags: z.array(z.string().trim().max(50)).max(100, 'Cannot specify more than 100 tags').optional().default([]),
+  groups: z.array(z.string()).max(50, 'Cannot specify more than 50 groups').optional().default([]),
   customFields: z.record(z.any()).optional().default({}),
   source: z.nativeEnum(CONTACT_SOURCES).optional().default(CONTACT_SOURCES.MANUAL),
   consentStatus: z.nativeEnum(CONSENT_STATUS).optional().default(CONSENT_STATUS.PENDING),
@@ -44,14 +44,14 @@ export const contactGroupSchema = z.object({
 });
 
 export const assignGroupsSchema = z.object({
-  groupIds: z.array(z.string()).min(1, 'At least one group ID must be provided'),
-  contactIds: z.array(z.string()).min(1, 'At least one contact ID must be provided'),
+  groupIds: z.array(z.string()).min(1, 'At least one group ID must be provided').max(200, 'Cannot specify more than 200 group IDs at once'),
+  contactIds: z.array(z.string()).min(1, 'At least one contact ID must be provided').max(1000, 'Cannot specify more than 1000 contact IDs at once'),
   action: z.enum(['add', 'remove']).default('add'),
 });
 
 export const manageTagsSchema = z.object({
-  tags: z.array(z.string().trim().min(1)).min(1, 'At least one tag must be provided'),
-  contactIds: z.array(z.string()).min(1, 'At least one contact ID must be provided'),
+  tags: z.array(z.string().trim().min(1)).min(1, 'At least one tag must be provided').max(50, 'Cannot specify more than 50 tags at once'),
+  contactIds: z.array(z.string()).min(1, 'At least one contact ID must be provided').max(1000, 'Cannot specify more than 1000 contact IDs at once'),
   action: z.enum(['add', 'remove']).default('add'),
 });
 

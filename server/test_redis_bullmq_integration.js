@@ -35,6 +35,37 @@ const runRedisBullMQTests = async () => {
   assert.ok(defaultOpts.removeOnFail?.age, 'Dead-letter retention age must be configured');
   console.log('✓ BullMQ default job options verified: 3 attempts with exponential backoff');
 
+  // Live Redis End-to-End Processing Check (when Redis connection is active, e.g. in CI or production)
+  if (isRedisConnected()) {
+    console.log('\n[Test 2b] Live Redis Active Queue Dispatch & Worker Execution');
+    const testQueue = new Queue('mailflow_audit_live_test', { connection: getRedisClient() });
+    let jobProcessed = false;
+    const testWorker = new Worker(
+      'mailflow_audit_live_test',
+      async (job) => {
+        assert.strictEqual(job.data.campaignName, 'Live Redis Audit');
+        jobProcessed = true;
+        return { success: true };
+      },
+      { connection: createRedisConnection() }
+    );
+
+    const liveJob = await testQueue.add('test-dispatch', { campaignName: 'Live Redis Audit' });
+    assert.ok(liveJob.id, 'Live job must receive a valid BullMQ job ID');
+    
+    for (let i = 0; i < 30 && !jobProcessed; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.strictEqual(jobProcessed, true, 'Live Redis job was not processed by BullMQ worker');
+    await testWorker.close();
+    await testQueue.close();
+    console.log('✓ Live Redis instance successfully enqueued and processed BullMQ job end-to-end');
+  } else {
+    console.log('\n[Test 2b] Live Redis Instance Check: Offline in local development environment');
+    console.log('  -> Degraded mode and zero-crash initialization verified');
+    console.log('  -> Live Redis end-to-end processing is verified in GitHub Actions via redis:7-alpine service container');
+  }
+
   // Test 3: Campaign Enqueue Verification
   console.log('\n[Test 3] Campaign Enqueue in Degraded vs Active Mode');
   const workspaceId = new mongoose.Types.ObjectId().toString();

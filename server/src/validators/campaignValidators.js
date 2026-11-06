@@ -3,9 +3,9 @@ import { CAMPAIGN_STATUS, RECIPIENT_SELECTION_TYPE } from '../models/Campaign.js
 
 export const recipientConfigSchema = z.object({
   type: z.nativeEnum(RECIPIENT_SELECTION_TYPE).default(RECIPIENT_SELECTION_TYPE.ALL_ELIGIBLE),
-  groupIds: z.array(z.string()).optional().default([]),
-  tags: z.array(z.string()).optional().default([]),
-  contactIds: z.array(z.string()).optional().default([]),
+  groupIds: z.array(z.string()).max(200, 'Cannot specify more than 200 group IDs').optional().default([]),
+  tags: z.array(z.string()).max(100, 'Cannot specify more than 100 tags').optional().default([]),
+  contactIds: z.array(z.string()).max(1000, 'Cannot specify more than 1000 contact IDs').optional().default([]),
 });
 
 export const campaignCreateSchema = z.object({

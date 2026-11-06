@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { contactService } from './src/services/contactService.js';
 import { CONSENT_STATUS, CONTACT_STATUS } from './src/models/Contact.js';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 async function runSmokeTest() {
   console.log('--- Starting Phase 6 Contact Management Smoke Test ---');
@@ -132,15 +132,18 @@ async function runSmokeTest() {
 
   // 9. Spreadsheet parsing & preview test
   console.log('8. Testing CSV/Excel import parser & preview...');
-  const sampleWorkbook = XLSX.utils.book_new();
-  const sampleData = [
-    { 'Email Address': 'alice@wonderland.org', 'First Name': 'Alice', 'Company': 'Wonderland Ltd', 'Tag List': 'vip, novel' },
-    { 'Email Address': 'bob@builder.com', 'First Name': 'Bob', 'Company': 'Builder Co', 'Tag List': 'construction' },
-    { 'Email Address': 'invalid-email-address', 'First Name': 'Bad', 'Company': 'Fail' },
+  const sampleWorkbook = new ExcelJS.Workbook();
+  const sampleSheet = sampleWorkbook.addWorksheet('ImportTest');
+  sampleSheet.columns = [
+    { header: 'Email Address', key: 'Email Address' },
+    { header: 'First Name', key: 'First Name' },
+    { header: 'Company', key: 'Company' },
+    { header: 'Tag List', key: 'Tag List' },
   ];
-  const sampleSheet = XLSX.utils.json_to_sheet(sampleData);
-  XLSX.utils.book_append_sheet(sampleWorkbook, sampleSheet, 'ImportTest');
-  const sampleBuffer = XLSX.write(sampleWorkbook, { bookType: 'xlsx', type: 'buffer' });
+  sampleSheet.addRow({ 'Email Address': 'alice@wonderland.org', 'First Name': 'Alice', 'Company': 'Wonderland Ltd', 'Tag List': 'vip, novel' });
+  sampleSheet.addRow({ 'Email Address': 'bob@builder.com', 'First Name': 'Bob', 'Company': 'Builder Co', 'Tag List': 'construction' });
+  sampleSheet.addRow({ 'Email Address': 'invalid-email-address', 'First Name': 'Bad', 'Company': 'Fail', 'Tag List': '' });
+  const sampleBuffer = Buffer.from(await sampleWorkbook.xlsx.writeBuffer());
 
   const preview = await contactService.previewImport({
     buffer: sampleBuffer,

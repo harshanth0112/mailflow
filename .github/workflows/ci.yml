@@ -42,7 +42,7 @@ jobs:
       - name: Verify Sensitive Files Excluded from Git
         run: |
           echo "Scanning Git tracked files for sensitive credentials or environment files..."
-          TRACKED_SECRETS=$(git ls-files | grep -E '(\.env$|\.env\.(?!example)[a-zA-Z0-9]+|\.pem$|\.key$|\.cert$|\.p12$|id_rsa)' || true)
+          TRACKED_SECRETS=$(git ls-files | grep -E '(\.env|\.pem$|\.key$|\.cert$|\.p12$|id_rsa)' | grep -v '\.env\.example' || true)
           if [ -n "$TRACKED_SECRETS" ]; then
             echo "ERROR: Disallowed sensitive files detected in Git tree!"
             exit 1

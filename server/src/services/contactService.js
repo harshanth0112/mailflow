@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS, CONTACT_SOURCES } from '../models/Contact.js';
 import { ContactGroup } from '../models/ContactGroup.js';
 import { parseUploadedSpreadsheet, isValidEmail, sanitizeCell } from '../utils/spreadsheetUtils.js';
@@ -446,7 +446,7 @@ export const contactService = {
    * Preview an uploaded CSV/Excel spreadsheet
    */
   async previewImport({ buffer, originalName }) {
-    const rawRows = parseUploadedSpreadsheet(buffer, originalName);
+    const rawRows = await parseUploadedSpreadsheet(buffer, originalName);
     if (!rawRows || rawRows.length === 0) {
       throw new Error('The uploaded file contains no data or could not be read.');
     }
@@ -484,7 +484,7 @@ export const contactService = {
    * Execute Contact Import from parsed rows with mapping
    */
   async executeImport({ workspaceId, userId, buffer, originalName, mapping = {}, defaultTags = [], defaultGroups = [], updateExisting = false }) {
-    const rawRows = parseUploadedSpreadsheet(buffer, originalName);
+    const rawRows = await parseUploadedSpreadsheet(buffer, originalName);
 
     const summary = {
       total: rawRows.length,
@@ -662,21 +662,40 @@ export const contactService = {
       'Created At': c.createdAt ? new Date(c.createdAt).toISOString() : '',
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Contacts');
+    // Build ExcelJS workbook (formula-safe, no xlsx prototype pollution risk)
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Contacts');
+
+    if (exportRows.length > 0) {
+      // Set columns from the first row's keys
+      worksheet.columns = Object.keys(exportRows[0]).map((key) => ({
+        header: key,
+        key,
+        width: Math.max(key.length + 2, 18),
+      }));
+      worksheet.addRows(exportRows);
+      // Bold the header row
+      worksheet.getRow(1).font = { bold: true };
+    }
 
     if (format === 'xlsx') {
-      const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+      const buffer = await workbook.xlsx.writeBuffer();
       return {
-        buffer,
+        buffer: Buffer.from(buffer),
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         filename: `contacts_export_${Date.now()}.xlsx`,
       };
     } else {
-      const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
+      // CSV export — build manually from exportRows to maintain sanitizeCell protection
+      const headers = exportRows.length > 0 ? Object.keys(exportRows[0]) : [];
+      const csvLines = [
+        headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(','),
+        ...exportRows.map((row) =>
+          headers.map((h) => `"${String(row[h] || '').replace(/"/g, '""')}"`).join(',')
+        ),
+      ];
       return {
-        buffer: Buffer.from(csvOutput, 'utf-8'),
+        buffer: Buffer.from(csvLines.join('\r\n'), 'utf-8'),
         contentType: 'text/csv; charset=utf-8',
         filename: `contacts_export_${Date.now()}.csv`,
       };

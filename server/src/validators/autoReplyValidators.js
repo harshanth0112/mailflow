@@ -11,12 +11,12 @@ export const autoReplyRuleCreateSchema = z.object({
   priority: z.number().int().optional().default(0),
   isActive: z.boolean().optional().default(true),
   conditions: z.object({
-    keywords: z.array(z.string()).optional().default([]),
+    keywords: z.array(z.string()).max(50, 'Cannot specify more than 50 keywords').optional().default([]),
     matchType: z.nativeEnum(MATCH_TYPES).optional().default(MATCH_TYPES.CONTAINS),
     checkSubject: z.boolean().optional().default(true),
     checkBody: z.boolean().optional().default(true),
-    senderWhitelist: z.array(z.string()).optional().default([]),
-    senderBlacklist: z.array(z.string()).optional().default([]),
+    senderWhitelist: z.array(z.string()).max(200, 'Whitelist cannot exceed 200 entries').optional().default([]),
+    senderBlacklist: z.array(z.string()).max(200, 'Blacklist cannot exceed 200 entries').optional().default([]),
   }).optional().default({}),
   replyTemplate: z.object({
     subject: z.string().optional().default('Re: {{subject}}'),
