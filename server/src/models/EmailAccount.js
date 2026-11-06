@@ -75,6 +75,21 @@ const emailAccountSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    autoReplySettings: {
+      enabled: { type: Boolean, default: false },
+      cooldownMinutes: { type: Number, default: 60 }, // Max 1 reply per sender per X minutes
+      defaultReplySubject: { type: String, default: 'Re: {{subject}}' },
+      defaultReplyBody: {
+        type: String,
+        default: 'Hello,\n\nThank you for reaching out. We have received your message and will get back to you shortly.\n\nBest regards,\nThe Team',
+      },
+      ignoreNoReply: { type: Boolean, default: true },
+      ignoreOwnMessages: { type: Boolean, default: true },
+      pollIntervalSeconds: { type: Number, default: 60 },
+      lastPolledAt: { type: Date, default: null },
+      historyId: { type: String, default: '' }, // For Gmail partial sync
+      deltaToken: { type: String, default: '' }, // For Graph delta sync
+    },
     metadata: {
       dailyQuota: { type: Number, default: 500 },
       sentToday: { type: Number, default: 0 },

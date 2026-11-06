@@ -5,12 +5,16 @@ export const QUEUE_NAMES = {
   CAMPAIGN_DISPATCH: 'mailflow_campaign_dispatch',
   CAMPAIGN_SCHEDULING: 'mailflow_campaign_scheduling',
   AUTOMATION_EXECUTION: 'mailflow_automation_execution',
+  INBOX_POLLING: 'mailflow_inbox_polling',
+  AUTO_REPLY_DISPATCH: 'mailflow_auto_reply_dispatch',
 };
 
 // Queue instances
 let campaignDispatchQueue = null;
 let campaignSchedulingQueue = null;
 let automationQueue = null;
+let inboxPollingQueue = null;
+let autoReplyDispatchQueue = null;
 
 const defaultJobOptions = {
   attempts: 3,
@@ -62,6 +66,26 @@ export const getQueue = (name) => {
       });
     }
     return automationQueue;
+  }
+
+  if (name === QUEUE_NAMES.INBOX_POLLING) {
+    if (!inboxPollingQueue) {
+      inboxPollingQueue = new Queue(name, {
+        connection: redis,
+        defaultJobOptions,
+      });
+    }
+    return inboxPollingQueue;
+  }
+
+  if (name === QUEUE_NAMES.AUTO_REPLY_DISPATCH) {
+    if (!autoReplyDispatchQueue) {
+      autoReplyDispatchQueue = new Queue(name, {
+        connection: redis,
+        defaultJobOptions,
+      });
+    }
+    return autoReplyDispatchQueue;
   }
 
   return new Queue(name, { connection: redis, defaultJobOptions });

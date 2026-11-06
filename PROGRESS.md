@@ -427,3 +427,78 @@ This document tracks chronological milestones, architecture choices, and impleme
 
 
 
+
+---
+
+## Phase 10 — Automatic Replies (Completed)
+
+### 1. Mailbox Integration (Gmail API & Microsoft Graph API)
+- **Gmail Provider (`server/src/services/email/GmailProvider.js`):**
+  - Extended scopes for mailbox reading and incoming synchronization: `gmail.readonly`, `gmail.modify`, `gmail.send`.
+  - Added message polling and inspection (`listMessages()`, `getMessage()`) supporting metadata, headers, historyId, and snippet extraction.
+- **Microsoft Graph Provider (`server/src/services/email/OutlookProvider.js`):**
+  - Implemented OAuth 2.0 authorization code exchange and token refresh against Microsoft Graph endpoints.
+  - Implemented Graph mail delivery (`/me/sendMail`) and inbox polling (`/me/mailFolders/inbox/messages`).
+- **EmailAccount Model Extension (`server/src/models/EmailAccount.js`):**
+  - Added `autoReplySettings`: `enabled`, `cooldownMinutes`, `defaultReplySubject`, `defaultReplyBody`, `ignoreNoReply`, `ignoreOwnMessages`, `pollIntervalSeconds`, `lastPolledAt`, and delta/history sync markers.
+
+### 2. Auto-Reply Engine & Safeguards
+- **AutoReplyRule Model (`server/src/models/AutoReplyRule.js`):**
+  - Flexible keyword matching (`contains`, `exact`, `starts_with`, `ends_with`, `regex`).
+  - Target fields: Subject line, message body.
+  - Senders whitelist / blacklist support.
+  - Priority evaluation (higher numbers evaluated first).
+  - Custom reply templates with placeholder replacement (`{{subject}}`).
+- **ActivityLog Model (`server/src/models/ActivityLog.js`):**
+  - Audit logs tracking incoming emails, matched rules, skip reasons, reply timestamps, and message IDs.
+  - Compound unique constraint `{ workspaceId: 1, emailAccountId: 1, providerMessageId: 1 }` to physically guarantee no duplicate processing.
+- **Mandatory Safety Safeguards Implemented (`server/src/services/autoReplyService.js`):**
+  - *Self message loop prevention:* Never replies if the sender address matches the mailbox's own address.
+  - *Automated email protection:* Ignores `no-reply@`, `noreply@`, `mailer-daemon@`, `bounce@`, and `donotreply@`.
+  - *Duplicate message rejection:* Incoming messages with an already processed `providerMessageId` are safely skipped.
+  - *Sender cooldown limits:* Enforces configurable time window (default 60 mins) so repeat incoming messages from the same sender do not cause mail loops.
+  - *Default fallback:* Automatically issues the mailbox's default acknowledgment reply if no custom keyword rule matches.
+  - *Disabled mailbox check:* Bypasses all processing if auto-reply is disabled at the account or rule level.
+
+### 3. Background Processing & Queue Jobs
+- **BullMQ Queue Management (`server/src/queues/queueManager.js`):**
+  - Added `QUEUE_NAMES.INBOX_POLLING` and `QUEUE_NAMES.AUTO_REPLY_DISPATCH`.
+- **Worker Process (`server/src/workers/autoReplyWorker.js` & `server/src/worker.js`):**
+  - Standalone worker processes polling jobs, queries unread incoming messages via provider APIs, matches rules, and triggers replies.
+
+### 4. API Endpoints
+| Method | Endpoint | Description | Protection / Validation |
+|---|---|---|---|
+| `GET` | `/api/v1/auto-reply/rules` | List auto-reply rules for a mailbox | `requireAuth`, `requireWorkspace`, `settings:manage` |
+| `POST` | `/api/v1/auto-reply/rules` | Create a new auto-reply rule | `requireAuth`, `requireWorkspace`, `settings:manage`, Zod |
+| `GET` | `/api/v1/auto-reply/rules/:id` | Get rule details | `requireAuth`, `requireWorkspace`, `settings:manage` |
+| `PATCH` | `/api/v1/auto-reply/rules/:id` | Update rule conditions or templates | `requireAuth`, `requireWorkspace`, `settings:manage`, Zod |
+| `DELETE` | `/api/v1/auto-reply/rules/:id` | Delete auto-reply rule | `requireAuth`, `requireWorkspace`, `settings:manage` |
+| `PATCH` | `/api/v1/auto-reply/settings/:accountId` | Enable/disable auto-reply & configure defaults | `requireAuth`, `requireWorkspace`, `settings:manage`, Zod |
+| `GET` | `/api/v1/auto-reply/logs` | Audit trail of processed and replied messages | `requireAuth`, `requireWorkspace`, `settings:manage` |
+| `POST` | `/api/v1/auto-reply/simulate` | Test message simulation against active rules | `requireAuth`, `requireWorkspace`, `settings:manage` |
+
+### 5. Frontend Implementation (`client/src/pages/auto-reply/AutoReplyPage.jsx`)
+- Replaced placeholder with a full 4-tab control center:
+  1. **Reply Rules:** Prioritized rule cards, active/pause toggles, edit modal, and keyword condition setup.
+  2. **Mailbox Settings:** Enable/disable toggle, sender cooldown limit, loop prevention checkboxes, and default reply editor.
+  3. **Activity & History:** Real-time stream of incoming messages, matched rules, skipped events, and delivery details.
+  4. **Rule Simulator:** In-app sandbox allowing operators to test subject/body combinations and verify matching behavior safely.
+
+### 6. Development Verification Checks
+- **Smoke test suite (`server/test_phase10_autoreply.js`):**
+  - Priority rule matching (passed).
+  - Duplicate message prevention (passed).
+  - Sender cooldown safeguard (passed).
+  - Own mailbox message suppression (passed).
+  - Automated/no-reply sender suppression (passed).
+  - Default fallback response on unmatched queries (passed).
+  - Mailbox disabled bypass (passed).
+  - Multi-tenant IDOR isolation (passed).
+- **Regression test suite:**
+  - Phase 3 Workspace: Passed 100%.
+  - Phase 6 Contacts: Passed 100%.
+  - Phase 7 Email Accounts: Passed 100%.
+  - Phase 8 Campaigns: Passed 100%.
+  - Phase 9 Scheduling: Passed 100%.
+- **Client production build:** `vite build` compiled with 0 errors (`1693 modules transformed`).

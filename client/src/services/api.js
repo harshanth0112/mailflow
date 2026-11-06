@@ -174,6 +174,28 @@ export const duplicateCampaign = (id) => api.post(`/campaigns/${id}/duplicate`);
 export const previewAudience = (data) => api.post('/campaigns/preview-audience', data);
 export const sendCampaignTestEmail = (id, data) => api.post(`/campaigns/${id}/test-email`, data);
 export const sendCampaign = (id, headers = {}) => api.post(`/campaigns/${id}/send`, {}, { headers });
+export const scheduleCampaign = (id, data) => api.post(`/campaigns/${id}/schedule`, data);
+export const rescheduleCampaign = (id, data) => api.post(`/campaigns/${id}/reschedule`, data);
+export const cancelCampaign = (id) => api.post(`/campaigns/${id}/cancel`);
 export const getCampaignRecipients = (id, params) => api.get(`/campaigns/${id}/recipients`, { params });
+
+// Automation endpoints
+export const getAutomations = (params) => api.get('/automations', { params });
+export const getAutomationById = (id) => api.get(`/automations/${id}`);
+export const createAutomation = (data) => api.post('/automations', data);
+export const updateAutomation = (id, data) => api.patch(`/automations/${id}`, data);
+export const deleteAutomation = (id) => api.delete(`/automations/${id}`);
+export const toggleAutomationStatus = (id) => api.post(`/automations/${id}/toggle`);
+export const getAutomationHistory = (id) => api.get(`/automations/${id}/history`);
+
+// Auto-Reply endpoints (Phase 10)
+export const getAutoReplyRules = (params) => api.get('/auto-reply/rules', { params });
+export const getAutoReplyRuleById = (id) => api.get(`/auto-reply/rules/${id}`);
+export const createAutoReplyRule = (data) => api.post('/auto-reply/rules', data);
+export const updateAutoReplyRule = (id, data) => api.patch(`/auto-reply/rules/${id}`, data);
+export const deleteAutoReplyRule = (id) => api.delete(`/auto-reply/rules/${id}`);
+export const updateAutoReplySettings = (accountId, data) => api.patch(`/auto-reply/settings/${accountId}`, data);
+export const getAutoReplyLogs = (params) => api.get('/auto-reply/logs', { params });
+export const simulateIncomingMessage = (data) => api.post('/auto-reply/simulate', data);
 
 export default api;

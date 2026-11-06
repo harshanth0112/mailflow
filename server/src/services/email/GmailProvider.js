@@ -11,9 +11,11 @@ export class GmailProvider extends BaseEmailProvider {
     super('gmail');
     this.clientId = env.GOOGLE_CLIENT_ID;
     this.clientSecret = env.GOOGLE_CLIENT_SECRET;
-    // Least privilege scopes for sending campaigns & profile identification
+    // Least privilege scopes for sending campaigns, reading mailbox messages for auto-reply, & profile identification
     this.defaultScopes = [
       'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.modify',
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile',
     ];
@@ -129,6 +131,70 @@ export class GmailProvider extends BaseEmailProvider {
       accessToken: data.access_token,
       expiresIn: data.expires_in,
       tokenExpiresAt: new Date(Date.now() + (data.expires_in || 3600) * 1000),
+    };
+  }
+
+  /**
+   * Fetch incoming messages from Gmail
+   * Supports polling with query and maxResults
+   */
+  async listMessages({ accessToken, query = 'is:unread', maxResults = 10, pageToken = null }) {
+    const params = new URLSearchParams({
+      q: query,
+      maxResults: String(maxResults),
+    });
+    if (pageToken) params.append('pageToken', pageToken);
+
+    const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || 'Failed to list Gmail messages');
+    }
+
+    return {
+      messages: data.messages || [],
+      nextPageToken: data.nextPageToken || null,
+      resultSizeEstimate: data.resultSizeEstimate || 0,
+    };
+  }
+
+  /**
+   * Get single message details from Gmail
+   */
+  async getMessage({ accessToken, messageId }) {
+    const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || `Failed to get Gmail message ${messageId}`);
+    }
+
+    // Parse headers
+    const headers = data.payload?.headers || [];
+    const getHeader = (name) => headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+    let body = '';
+    if (data.snippet) {
+      body = data.snippet;
+    }
+
+    return {
+      id: data.id,
+      threadId: data.threadId,
+      snippet: data.snippet || '',
+      historyId: data.historyId,
+      internalDate: data.internalDate,
+      from: getHeader('From'),
+      to: getHeader('To'),
+      subject: getHeader('Subject'),
+      date: getHeader('Date'),
+      messageIdHeader: getHeader('Message-ID'),
+      body,
     };
   }
 

@@ -1,7 +1,8 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import { connectDatabase } from './config/db.js';
+import { connectDatabase } from './config/database.js';
 import { startBackgroundWorkers, stopBackgroundWorkers } from './workers/campaignWorker.js';
+import { startAutoReplyWorkers, stopAutoReplyWorkers } from './workers/autoReplyWorker.js';
 
 dotenv.config();
 
@@ -12,11 +13,13 @@ const start = async () => {
     await connectDatabase();
     console.log('📦 Database connected to worker process.');
 
-    const workers = startBackgroundWorkers();
+    startBackgroundWorkers();
+    startAutoReplyWorkers();
 
     const gracefulShutdown = async (signal) => {
       console.log(`\nReceived ${signal}. Gracefully stopping worker...`);
       await stopBackgroundWorkers();
+      await stopAutoReplyWorkers();
       if (mongoose.connection.readyState === 1) {
         await mongoose.connection.close();
       }
