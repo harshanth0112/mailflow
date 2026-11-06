@@ -143,8 +143,13 @@ const runRedisBullMQTests = async () => {
     const testQueue = new Queue(queueName, { connection: queueConn });
 
     /* ── 3.1 Job Creation & Enqueueing ───────────────────────────────────── */
-    const jobData = { testId: 'audit-run-001', payload: 'mailflow-live-test' };
+    const jobData = {
+      testId: 'audit-run-001',
+      payload: 'mailflow-live-test',
+    };
+    const deterministicJobId = `live-${Date.now()}`;
     const liveJob = await testQueue.add('test-task', jobData, {
+      jobId: deterministicJobId,
       attempts: 3,
       backoff: { type: 'fixed', delay: 100 },
     });
@@ -153,7 +158,7 @@ const runRedisBullMQTests = async () => {
 
     /* ── 3.2 Deterministic Idempotency & Duplicate Prevention ─────────────── */
     const duplicateJob = await testQueue.add('test-task', jobData, {
-      jobId: liveJob.id, // attempt to enqueue with identical ID
+      jobId: deterministicJobId,
     });
     assert.strictEqual(duplicateJob.id, liveJob.id,
       'Duplicate job with same jobId must return existing ID');
@@ -220,6 +225,7 @@ const runRedisBullMQTests = async () => {
     assert.strictEqual(retryState, 'completed',
       `Retry job must reach "completed" state; actual: ${retryState}`);
     console.log('✓ Worker retry verified: job retried → succeeded on attempt 2 → completed state confirmed');
+    await testWorker.close();
 
     /* ── 3.5 Exhausted Retry Handling & Permanent Failure Transition ──────── */
     let failedEventReceived = false;
@@ -232,10 +238,16 @@ const runRedisBullMQTests = async () => {
       { connection: failWorkerConn }
     );
 
-    failWorker.on('failed', (j, err) => {
-      if (j && j.id === 'fail-test-job') {
+    failWorker.on('failed', (job) => {
+      if (
+        job &&
+        job.id === 'fail-test-job' &&
+        job.attemptsMade >= (job.opts.attempts || 1)
+      ) {
         failedEventReceived = true;
-        console.log(`  [Worker event] failed     job=${j.id}  err="${err.message}"  attempts=${j.attemptsMade}`);
+        console.log(
+          `Final failure: ${job.id}, attempts: ${job.attemptsMade}`
+        );
       }
     });
 
@@ -263,7 +275,6 @@ const runRedisBullMQTests = async () => {
     console.log('✓ Permanent failure handling verified: exhausted-retry job reached "failed" state');
 
     // ── Cleanup ────────────────────────────────────────────────────────────
-    await testWorker.close();
     await failWorker.close();
     await testQueue.obliterate({ force: true });
     await testQueue.close();
