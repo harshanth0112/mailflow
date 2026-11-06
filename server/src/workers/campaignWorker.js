@@ -234,8 +234,26 @@ export const startBackgroundWorkers = () => {
     console.log(`[Worker] Dispatch job ${job.id} completed successfully.`);
   });
 
-  dispatchWorker.on('failed', (job, err) => {
-    console.error(`[Worker] Dispatch job ${job.id} failed with error: ${err.message}`);
+  dispatchWorker.on('failed', async (job, err) => {
+    console.error(`[Worker] Dispatch job ${job?.id} failed: ${err.message}`);
+    // If all attempts exhausted, update campaign status in DB so it doesn't stay stuck in PROCESSING
+    if (job && job.attemptsMade >= (job.opts?.attempts || 3)) {
+      try {
+        const { campaignId, workspaceId } = job.data || {};
+        if (campaignId) {
+          await Campaign.findOneAndUpdate(
+            { _id: campaignId, ...(workspaceId ? { workspaceId } : {}) },
+            {
+              status: CAMPAIGN_STATUS.FAILED,
+              completedAt: new Date(),
+            }
+          );
+          console.warn(`[Worker] Campaign ${campaignId} exhausted all retries. Marked as FAILED.`);
+        }
+      } catch (dbErr) {
+        console.error(`[Worker] Failed to update campaign status on job failure: ${dbErr.message}`);
+      }
+    }
   });
 
   // Campaign Scheduling Worker

@@ -15,9 +15,39 @@ jobs:
       matrix:
         node-version: [ 20.x, 22.x ]
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+          GITLEAKS_ENABLE_SUMMARY: true
+
+      - name: Verify Sensitive Files Excluded from Git
+        run: |
+          echo "Scanning Git tracked files for sensitive credentials or environment files..."
+          TRACKED_SECRETS=$(git ls-files | grep -E '(\.env$|\.env\.(?!example)[a-zA-Z0-9]+|\.pem$|\.key$|\.cert$|\.p12$|id_rsa)' || true)
+          if [ -n "$TRACKED_SECRETS" ]; then
+            echo "ERROR: Disallowed sensitive files detected in Git tree!"
+            exit 1
+          fi
+          echo "Verification passed: No sensitive files tracked by Git."
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
@@ -27,12 +57,6 @@ jobs:
 
       - name: Install Monorepo Dependencies
         run: npm ci
-
-      - name: Secret Leak & Credential Exposure Detection
-        run: |
-          echo "Scanning codebase for accidentally committed credentials or env files..."
-          ! git ls-files | grep -E '(\.env$|\.env\.local|\.pem$|\.key$)'
-          ! grep -rnw 'server/src' -e 'AIzaSy' || true
 
       - name: Run Backend Regression & Security Test Suites
         working-directory: server
@@ -45,8 +69,10 @@ jobs:
           node test_phase10_autoreply.js
           node test_phase11_analytics.js
           node test_phase12_production.js
+          node test_redis_bullmq_integration.js
+          node test_transactional_email.js
+          node test_security_review.js
 
       - name: Build Production Frontend
         working-directory: client
         run: npm run build
-

@@ -10,7 +10,11 @@
     "dev:server": "nodemon src/server.js",
     "worker": "node src/worker.js",
     "dev:worker": "nodemon src/worker.js",
-    "test": "node test_phase12_production.js"
+    "test": "node test_phase3_workspace.js && node test_phase6_contacts.js && node test_phase7_email.js && node test_phase8_campaigns.js && node test_phase9_scheduling.js && node test_phase10_autoreply.js && node test_phase11_analytics.js && node test_phase12_production.js && node test_redis_bullmq_integration.js && node test_transactional_email.js && node test_security_review.js",
+    "test:phase12": "node test_phase12_production.js",
+    "test:redis": "node test_redis_bullmq_integration.js",
+    "test:email": "node test_transactional_email.js",
+    "test:security": "node test_security_review.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

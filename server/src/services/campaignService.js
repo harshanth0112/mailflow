@@ -454,6 +454,7 @@ export const campaignService = {
     campaign.sendIdempotencyKey = assignedKey;
     campaign.status = CAMPAIGN_STATUS.QUEUED;
     campaign.startedAt = new Date();
+    campaign.statistics = campaign.statistics || { totalRecipients: 0, sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0, failed: 0 };
     campaign.statistics.totalRecipients = eligibleContacts.length;
 
     // Persist individual recipient records before dispatch
@@ -685,6 +686,72 @@ export const campaignService = {
         },
       };
     }
+  },
+
+  /**
+   * Reconnect & Disaster Recovery:
+   * Scans for campaigns marked QUEUED or overdue SCHEDULED and ensures they are
+   * enqueued in BullMQ without silent job loss.
+   */
+  async recoverStrandedCampaigns() {
+    let recoveredCount = 0;
+    if (mongoose.connection.readyState === 1) {
+      const strandedQueued = await Campaign.find({
+        status: CAMPAIGN_STATUS.QUEUED,
+      });
+
+      const overdueScheduled = await Campaign.find({
+        status: CAMPAIGN_STATUS.SCHEDULED,
+        scheduledAt: { $lte: new Date() },
+      });
+
+      const dispatchQ = getQueue(QUEUE_NAMES.CAMPAIGN_DISPATCH);
+
+      for (const camp of strandedQueued) {
+        try {
+          const jobId = `campaign-dispatch-${camp._id.toString()}-${camp.idempotencyKey || 'recovery'}`;
+          const existingJob = await dispatchQ.getJob(jobId);
+          if (!existingJob) {
+            await dispatchQ.add(
+              'dispatch-campaign',
+              { campaignId: camp._id.toString(), workspaceId: camp.workspaceId.toString() },
+              { jobId }
+            );
+            recoveredCount++;
+            console.log(`[Recovery] Re-enqueued stranded QUEUED campaign: ${camp._id}`);
+          }
+        } catch (err) {
+          console.warn(`[Recovery] Failed to recover campaign ${camp._id}:`, err.message);
+        }
+      }
+
+      for (const camp of overdueScheduled) {
+        try {
+          const jobId = `campaign-sched-${camp._id.toString()}`;
+          const existingJob = await dispatchQ.getJob(jobId);
+          if (!existingJob) {
+            await dispatchQ.add(
+              'dispatch-campaign',
+              { campaignId: camp._id.toString(), workspaceId: camp.workspaceId.toString() },
+              { jobId }
+            );
+            camp.status = CAMPAIGN_STATUS.QUEUED;
+            await camp.save();
+            recoveredCount++;
+            console.log(`[Recovery] Enqueued overdue SCHEDULED campaign: ${camp._id}`);
+          }
+        } catch (err) {
+          console.warn(`[Recovery] Failed to recover scheduled campaign ${camp._id}:`, err.message);
+        }
+      }
+    } else {
+      for (const camp of devCampaigns.values()) {
+        if (camp.status === CAMPAIGN_STATUS.QUEUED) {
+          recoveredCount++;
+        }
+      }
+    }
+    return { recoveredCount };
   },
 };
 
