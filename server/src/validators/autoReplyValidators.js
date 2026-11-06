@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { MATCH_TYPES } from '../models/AutoReplyRule.js';
 
 export const autoReplyRuleCreateSchema = z.object({
-  emailAccountId: z.string({ required_error: 'emailAccountId is required' }),
+  emailAccountId: z.string({ error: (issue) => issue.input === undefined ? 'emailAccountId is required' : undefined }),
   name: z
-    .string({ required_error: 'Rule name is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Rule name is required' : undefined })
     .trim()
     .min(1, 'Name cannot be empty')
     .max(120, 'Name cannot exceed 120 characters'),
@@ -12,15 +12,15 @@ export const autoReplyRuleCreateSchema = z.object({
   isActive: z.boolean().optional().default(true),
   conditions: z.object({
     keywords: z.array(z.string()).max(50, 'Cannot specify more than 50 keywords').optional().default([]),
-    matchType: z.nativeEnum(MATCH_TYPES).optional().default(MATCH_TYPES.CONTAINS),
+    matchType: z.enum(MATCH_TYPES).optional().default(MATCH_TYPES.CONTAINS),
     checkSubject: z.boolean().optional().default(true),
     checkBody: z.boolean().optional().default(true),
     senderWhitelist: z.array(z.string()).max(200, 'Whitelist cannot exceed 200 entries').optional().default([]),
     senderBlacklist: z.array(z.string()).max(200, 'Blacklist cannot exceed 200 entries').optional().default([]),
-  }).optional().default({}),
+  }).optional().prefault({}),
   replyTemplate: z.object({
     subject: z.string().optional().default('Re: {{subject}}'),
-    body: z.string({ required_error: 'Reply body is required' }).min(1, 'Reply body cannot be empty'),
+    body: z.string({ error: (issue) => issue.input === undefined ? 'Reply body is required' : undefined }).min(1, 'Reply body cannot be empty'),
     htmlBody: z.string().optional().default(''),
   }),
 });
@@ -36,4 +36,3 @@ export const autoReplySettingsSchema = z.object({
   ignoreOwnMessages: z.boolean().optional(),
   pollIntervalSeconds: z.number().int().min(10).max(3600).optional(),
 });
-

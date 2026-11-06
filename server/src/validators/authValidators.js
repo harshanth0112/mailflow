@@ -2,17 +2,17 @@ import { z } from 'zod';
 
 export const registerSchema = z.object({
   name: z
-    .string({ required_error: 'Name is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Name is required' : undefined })
     .trim()
     .min(2, 'Name must be at least 2 characters')
     .max(100, 'Name cannot exceed 100 characters'),
   email: z
-    .string({ required_error: 'Email is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Email is required' : undefined })
     .trim()
     .email('Invalid email address')
     .toLowerCase(),
   password: z
-    .string({ required_error: 'Password is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Password is required' : undefined })
     .min(8, 'Password must be at least 8 characters')
     .max(128, 'Password cannot exceed 128 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
@@ -25,18 +25,18 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   email: z
-    .string({ required_error: 'Email is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Email is required' : undefined })
     .trim()
     .email('Invalid email address')
     .toLowerCase(),
   password: z
-    .string({ required_error: 'Password is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Password is required' : undefined })
     .min(1, 'Password is required'),
 });
 
 export const verifyEmailSchema = z.object({
   token: z
-    .string({ required_error: 'Verification token is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Verification token is required' : undefined })
     .min(10, 'Invalid token length'),
   email: z
     .string()
@@ -47,7 +47,7 @@ export const verifyEmailSchema = z.object({
 
 export const resendVerificationSchema = z.object({
   email: z
-    .string({ required_error: 'Email is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Email is required' : undefined })
     .trim()
     .email('Invalid email address')
     .toLowerCase(),
@@ -55,7 +55,7 @@ export const resendVerificationSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   email: z
-    .string({ required_error: 'Email is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Email is required' : undefined })
     .trim()
     .email('Invalid email address')
     .toLowerCase(),
@@ -63,10 +63,10 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   token: z
-    .string({ required_error: 'Reset token is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Reset token is required' : undefined })
     .min(10, 'Invalid reset token'),
   password: z
-    .string({ required_error: 'Password is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Password is required' : undefined })
     .min(8, 'Password must be at least 8 characters')
     .max(128, 'Password cannot exceed 128 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
@@ -76,10 +76,10 @@ export const resetPasswordSchema = z.object({
 
 export const changePasswordSchema = z.object({
   currentPassword: z
-    .string({ required_error: 'Current password is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'Current password is required' : undefined })
     .min(1, 'Current password is required'),
   newPassword: z
-    .string({ required_error: 'New password is required' })
+    .string({ error: (issue) => issue.input === undefined ? 'New password is required' : undefined })
     .min(8, 'New password must be at least 8 characters')
     .max(128, 'New password cannot exceed 128 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
@@ -107,4 +107,3 @@ export const updateProfileSchema = z.object({
     .boolean()
     .optional(),
 });
-
