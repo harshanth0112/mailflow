@@ -170,3 +170,4 @@ Before switching DNS to live traffic:
 5. Generate unique `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and `ENCRYPTION_KEY` secrets.
 6. Verify DNS records for SPF, DKIM, and DMARC for custom transactional sending domains.
 7. Test `/api/v1/health` endpoint from external monitoring tools (Datadog, UptimeRobot, Pingdom).
+
