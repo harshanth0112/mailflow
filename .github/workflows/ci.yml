@@ -1,0 +1,51 @@
+name: MailFlow CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  audit-and-test:
+    name: Lint, Audit & Test Suite
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [ 20.x, 22.x ]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Secret Leak & Credential Exposure Detection
+        run: |
+          echo "Scanning codebase for accidentally committed credentials or env files..."
+          ! git ls-files | grep -E '(\.env$|\.env\.local|\.pem$|\.key$)'
+          ! grep -rnw 'server/src' -e 'AIzaSy' || true
+
+      - name: Run Backend Regression & Security Test Suites
+        working-directory: server
+        run: |
+          node test_phase3_workspace.js
+          node test_phase6_contacts.js
+          node test_phase7_email.js
+          node test_phase8_campaigns.js
+          node test_phase9_scheduling.js
+          node test_phase10_autoreply.js
+          node test_phase11_analytics.js
+          node test_phase12_production.js
+
+      - name: Build Production Frontend
+        working-directory: client
+        run: npm run build

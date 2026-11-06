@@ -9,7 +9,8 @@
     "dev": "nodemon src/server.js",
     "dev:server": "nodemon src/server.js",
     "worker": "node src/worker.js",
-    "dev:worker": "nodemon src/worker.js"
+    "dev:worker": "nodemon src/worker.js",
+    "test": "node test_phase12_production.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

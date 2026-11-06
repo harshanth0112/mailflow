@@ -8,8 +8,12 @@ import campaignRoutes from './campaignRoutes.js';
 import automationRoutes from './automationRoutes.js';
 import autoReplyRoutes from './autoReplyRoutes.js';
 import analyticsRoutes from './analyticsRoutes.js';
+import { apiLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
+
+// General rate limiter for all non-auth API routes
+router.use(apiLimiter);
 
 // Mount sub-routers
 router.use('/health', healthRoutes);

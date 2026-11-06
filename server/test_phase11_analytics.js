@@ -176,3 +176,4 @@ runPhase11Tests()
     console.error('Phase 11 test failed:', err);
     process.exit(1);
   });
+

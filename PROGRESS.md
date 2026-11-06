@@ -573,3 +573,55 @@ This document tracks chronological milestones, architecture choices, and impleme
   - Phase 9 Scheduling: Passed 100%.
   - Phase 10 Automatic Replies: Passed 100%.
 - **Client production build:** `vite build` compiled with 0 errors (`1693 modules transformed`).
+
+---
+
+## Phase 12 — Production Hardening & Deployment Readiness (Completed)
+
+### 1. Comprehensive Architecture & Security Audit
+- Conducted full audit across Frontend, Backend API, BullMQ background queues, MongoDB models, Redis connections, and OAuth authentication flows.
+- Validated workspace-level data isolation (IDOR protection) on all endpoints and verified strict multi-tenant filtering.
+
+### 2. Security Hardening
+- **HTTP Security & Headers:** Enforced `helmet` with strict CSP directives, frame-guard, and nosniff protections.
+- **CORS Restrictions:** Configured strict origin whitelisting (`CLIENT_URL`) with explicit allowed methods and headers (`Content-Type`, `Authorization`, `x-workspace-id`, `x-idempotency-key`).
+- **NoSQL Injection Protection:** Implemented custom `mongoSanitize` middleware stripping `$` and `.` operators from `req.body`, `req.query`, and `req.params`.
+- **Rate Limiting:**
+  - Standard API requests: 300 requests / 15 minutes (`apiLimiter`).
+  - Auth routes: 60 requests / 15 minutes (`authLimiter`).
+  - Login attempts: 10 attempts / 15 minutes (`loginLimiter`).
+  - Password resets: 5 requests / 1 hour (`passwordResetLimiter`).
+- **Data Protection at Rest & In Logs:**
+  - `AES-256-GCM` encryption for mailbox OAuth tokens at rest with 96-bit random IVs.
+  - Sensitive log sanitizer (`server/src/utils/logger.js`) redacting passwords, hashes, JWT secrets, and bearer tokens from application logs.
+  - Production error handler masking internal 500 error details from exposing database or system internals.
+
+### 3. Database & Worker Reliability
+- **MongoDB Connection Resilience:** Configured production connection pooling (`maxPoolSize: 20`, `minPoolSize: 5`, `socketTimeoutMS: 45000`) and event listeners.
+- **Worker & Server Decoupling:** Decoupled HTTP API server (`server.js`) from asynchronous queue workers (`worker.js`).
+- **Graceful Shutdown:** Implemented coordinated teardown for HTTP listeners, Redis queue clients, BullMQ workers, and MongoDB connection pools upon `SIGINT` / `SIGTERM`.
+- **Health Probing:** Updated `/api/v1/health` endpoint returning clean status indicators for container liveness and readiness without exposing infrastructure credentials.
+
+### 4. CI/CD & Deployment Documentation
+- **GitHub Actions (`.github/workflows/ci.yml`):** Multi-node matrix (20.x, 22.x) verifying dependencies, secret/credential leaks, backend regression suites, and production frontend build.
+- **Deployment Guide (`DEPLOYMENT.md`):** Complete production hosting runbook covering MongoDB Atlas (backup/PITR/restore), Redis Cloud, environment variables reference, process management with PM2/Docker, and production checklist.
+
+### 5. Verification Checks
+- **Phase 12 Production Test Suite (`server/test_phase12_production.js`):**
+  - Log sanitizer redaction (passed).
+  - NoSQL injection stripping (passed).
+  - AES-256-GCM token encryption/decryption roundtrip (passed).
+  - Health endpoint output and credential suppression (passed).
+  - Express security middleware stack registration (passed).
+  - Background worker startup and clean shutdown (passed).
+- **Full Regression Test Suite:**
+  - Phase 3 Workspace: Passed 100%.
+  - Phase 6 Contacts: Passed 100%.
+  - Phase 7 Email Accounts: Passed 100%.
+  - Phase 8 Campaigns: Passed 100%.
+  - Phase 9 Scheduling: Passed 100%.
+  - Phase 10 Automatic Replies: Passed 100%.
+  - Phase 11 Analytics & Admin: Passed 100%.
+  - Phase 12 Production Hardening: Passed 100%.
+- **Client production build:** `npm run build:client` transformed 1693 modules and compiled `dist/` with 0 errors.
+

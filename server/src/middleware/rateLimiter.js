@@ -1,6 +1,21 @@
 import rateLimit from 'express-rate-limit';
 import { sendError } from '../utils/apiResponse.js';
 
+// General API rate limiter for standard authenticated requests: 300 requests per 15 minutes
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    return sendError(
+      res,
+      429,
+      'Too many requests to the API. Please wait a few moments before trying again.'
+    );
+  },
+});
+
 // General auth endpoint rate limiter: 60 requests per 15 minutes
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

@@ -1,6 +1,8 @@
 import app from './app.js';
 import { env } from './config/env.js';
 import { connectDatabase, closeDatabase } from './config/database.js';
+import { closeRedisConnection } from './config/redis.js';
+import { logger } from './utils/logger.js';
 
 let server;
 
@@ -9,16 +11,21 @@ const startServer = async () => {
   connectDatabase();
 
   server = app.listen(env.PORT, () => {
-    console.log(`🚀 MailFlow Server listening on port ${env.PORT} [${env.NODE_ENV}]`);
-    console.log(`🔗 Health Check URL: http://localhost:${env.PORT}/api/v1/health`);
+    logger.info(`MailFlow Server listening on port ${env.PORT} [${env.NODE_ENV}]`);
+    logger.info(`Health Check URL: http://localhost:${env.PORT}/api/v1/health`);
   });
 
   const handleTermination = async (signal) => {
-    console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+    logger.info(`Received ${signal}. Starting graceful shutdown...`);
     if (server) {
       server.close(async () => {
-        console.log('🔌 HTTP server closed.');
-        await closeDatabase();
+        logger.info('HTTP server closed.');
+        try {
+          await closeDatabase();
+          await closeRedisConnection();
+        } catch (err) {
+          logger.error(`Error during server cleanup: ${err.message}`);
+        }
         process.exit(0);
       });
     } else {
@@ -31,7 +38,7 @@ const startServer = async () => {
 };
 
 startServer().catch((err) => {
-  console.error('Fatal error starting server:', err);
+  logger.error(`Fatal error starting server: ${err.message}`);
   process.exit(1);
 });
 

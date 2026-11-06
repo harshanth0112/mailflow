@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
 import { getRedisClient, createRedisConnection } from '../config/redis.js';
-import { QUEUE_NAMES } from './queueManager.js';
+import { QUEUE_NAMES } from '../queues/queueManager.js';
 import { Campaign, CAMPAIGN_STATUS } from '../models/Campaign.js';
 import { CampaignRecipient, RECIPIENT_STATUS } from '../models/CampaignRecipient.js';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS } from '../models/Contact.js';
