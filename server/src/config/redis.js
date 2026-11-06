@@ -14,10 +14,15 @@ export const createRedisConnection = () => {
         db: env.REDIS_DB,
         maxRetriesPerRequest: null, // Required by BullMQ
         enableReadyCheck: false,
+        lazyConnect: true,
         retryStrategy: (times) => {
-          // Linear/exponential backoff, cap at 5 seconds
-          const delay = Math.min(times * 200, 5000);
-          return delay;
+          if (process.env.NODE_ENV === 'test') {
+            return null; // Stop retrying immediately during tests
+          }
+          if (times > 5) {
+            return 10000; // Cap backoff
+          }
+          return Math.min(times * 200, 2000);
         },
       };
 
@@ -53,4 +58,17 @@ export const getRedisClient = () => {
 };
 
 export const isRedisConnected = () => isConnected;
+
+export const closeRedisConnection = async () => {
+  if (redisInstance) {
+    try {
+      await redisInstance.quit();
+    } catch {
+      redisInstance.disconnect();
+    }
+    redisInstance = null;
+    isConnected = false;
+  }
+};
+
 

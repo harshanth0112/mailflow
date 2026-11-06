@@ -7,6 +7,8 @@ import { emailProviderRegistry } from './email/EmailProviderRegistry.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
 import { personalizeContent } from '../utils/templatePersonalizer.js';
 import { generateRandomToken } from '../utils/tokenUtils.js';
+import { getQueue, QUEUE_NAMES } from '../queues/queueManager.js';
+import { isRedisConnected } from '../config/redis.js';
 
 // In-memory fallback map for test/offline mode
 export const devCampaigns = new Map();
@@ -468,6 +470,18 @@ export const campaignService = {
       // Remove any existing pending records for safety and insert fresh
       await CampaignRecipient.deleteMany({ campaignId: campaign._id });
       await CampaignRecipient.insertMany(recipientRecords, { ordered: false });
+
+      // Enqueue BullMQ dispatch job if Redis is active
+      try {
+        const dispatchQ = getQueue(QUEUE_NAMES.CAMPAIGN_DISPATCH);
+        await dispatchQ.add(
+          'dispatch-campaign',
+          { campaignId: campaign._id.toString(), workspaceId: workspaceId.toString() },
+          { jobId: `campaign-dispatch-${campaign._id.toString()}-${assignedKey}` }
+        );
+      } catch (redisErr) {
+        console.warn(`[CampaignService] Could not enqueue BullMQ dispatch job: ${redisErr.message}`);
+      }
     } else {
       devCampaigns.set(campaignId, campaign);
       recipientRecords.forEach((r) => {
@@ -482,6 +496,152 @@ export const campaignService = {
       recipientCount: eligibleContacts.length,
       idempotencyKey: assignedKey,
       message: 'Campaign queued successfully. Recipient records initialized.',
+    };
+  },
+
+  /**
+   * Schedule campaign for a future date and time
+   */
+  async scheduleCampaign({ workspaceId, campaignId, scheduledAt, timezone = 'UTC' }) {
+    const scheduledDate = new Date(scheduledAt);
+    if (isNaN(scheduledDate.getTime())) {
+      throw new Error('Invalid scheduledAt timestamp format');
+    }
+
+    const now = new Date();
+    if (scheduledDate <= now) {
+      throw new Error('Scheduled date/time must be strictly in the future');
+    }
+
+    let campaign;
+    if (mongoose.connection.readyState === 1) {
+      campaign = await Campaign.findOne({ _id: campaignId, workspaceId });
+    } else {
+      campaign = devCampaigns.get(campaignId);
+      if (campaign && campaign.workspaceId.toString() !== workspaceId.toString()) {
+        campaign = null;
+      }
+    }
+
+    if (!campaign) {
+      throw new Error('Campaign not found');
+    }
+
+    if (![CAMPAIGN_STATUS.DRAFT, CAMPAIGN_STATUS.SCHEDULED].includes(campaign.status)) {
+      throw new Error(`Cannot schedule campaign with status '${campaign.status}'. Only draft or scheduled campaigns can be scheduled.`);
+    }
+
+    if (!campaign.senderEmailAccountId) {
+      throw new Error('Cannot schedule campaign without selecting a sender email account');
+    }
+
+    campaign.scheduledAt = scheduledDate;
+    campaign.timezone = timezone;
+    campaign.status = CAMPAIGN_STATUS.SCHEDULED;
+
+    const delayMs = Math.max(0, scheduledDate.getTime() - Date.now());
+
+    if (mongoose.connection.readyState === 1) {
+      await campaign.save();
+
+      try {
+        const schedQ = getQueue(QUEUE_NAMES.CAMPAIGN_SCHEDULING);
+        const existingJob = await schedQ.getJob(`campaign-sched-${campaignId}`);
+        if (existingJob) {
+          await existingJob.remove();
+        }
+        await schedQ.add(
+          'execute-scheduled-campaign',
+          { campaignId: campaign._id.toString(), workspaceId: workspaceId.toString() },
+          {
+            jobId: `campaign-sched-${campaignId}`,
+            delay: delayMs,
+          }
+        );
+      } catch (redisErr) {
+        console.warn(`[CampaignService] Could not enqueue BullMQ delayed job: ${redisErr.message}`);
+      }
+    } else {
+      devCampaigns.set(campaignId, campaign);
+    }
+
+    return campaign;
+  },
+
+  /**
+   * Reschedule an already scheduled campaign
+   */
+  async rescheduleCampaign({ workspaceId, campaignId, scheduledAt, timezone }) {
+    let campaign;
+    if (mongoose.connection.readyState === 1) {
+      campaign = await Campaign.findOne({ _id: campaignId, workspaceId });
+    } else {
+      campaign = devCampaigns.get(campaignId);
+      if (campaign && campaign.workspaceId.toString() !== workspaceId.toString()) {
+        campaign = null;
+      }
+    }
+
+    if (!campaign) {
+      throw new Error('Campaign not found');
+    }
+
+    if (campaign.status !== CAMPAIGN_STATUS.SCHEDULED) {
+      throw new Error(`Campaign must be in 'scheduled' status to be rescheduled. Current status: '${campaign.status}'`);
+    }
+
+    return this.scheduleCampaign({
+      workspaceId,
+      campaignId,
+      scheduledAt,
+      timezone: timezone || campaign.timezone || 'UTC',
+    });
+  },
+
+  /**
+   * Cancel a scheduled or queued campaign
+   */
+  async cancelCampaign({ workspaceId, campaignId }) {
+    let campaign;
+    if (mongoose.connection.readyState === 1) {
+      campaign = await Campaign.findOne({ _id: campaignId, workspaceId });
+    } else {
+      campaign = devCampaigns.get(campaignId);
+      if (campaign && campaign.workspaceId.toString() !== workspaceId.toString()) {
+        campaign = null;
+      }
+    }
+
+    if (!campaign) {
+      throw new Error('Campaign not found');
+    }
+
+    if (![CAMPAIGN_STATUS.SCHEDULED, CAMPAIGN_STATUS.QUEUED].includes(campaign.status)) {
+      throw new Error(`Only scheduled or queued campaigns can be cancelled. Current status: '${campaign.status}'`);
+    }
+
+    campaign.status = CAMPAIGN_STATUS.CANCELLED;
+
+    if (mongoose.connection.readyState === 1) {
+      await campaign.save();
+
+      try {
+        const schedQ = getQueue(QUEUE_NAMES.CAMPAIGN_SCHEDULING);
+        const schedJob = await schedQ.getJob(`campaign-sched-${campaignId}`);
+        if (schedJob) {
+          await schedJob.remove();
+        }
+      } catch (redisErr) {
+        console.warn(`[CampaignService] Could not remove BullMQ delayed job: ${redisErr.message}`);
+      }
+    } else {
+      devCampaigns.set(campaignId, campaign);
+    }
+
+    return {
+      campaignId: campaign._id,
+      status: campaign.status,
+      message: 'Campaign has been successfully cancelled.',
     };
   },
 
