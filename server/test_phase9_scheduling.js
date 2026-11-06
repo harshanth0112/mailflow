@@ -175,3 +175,4 @@ runPhase9Tests()
     await closeRedisConnection();
     process.exit(1);
   });
+

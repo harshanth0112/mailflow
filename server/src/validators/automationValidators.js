@@ -45,3 +45,4 @@ export const automationQuerySchema = z.object({
   search: z.string().optional().default(''),
   status: z.nativeEnum(AUTOMATION_STATUS).optional(),
 });
+
