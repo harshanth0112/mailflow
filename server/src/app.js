@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import apiRoutes from './routes/index.js';
 import { notFoundHandler } from './middleware/notFound.js';
@@ -11,6 +12,9 @@ const app = express();
 
 // Security HTTP headers
 app.use(helmet());
+
+// Cookie parser for secure refresh token handling
+app.use(cookieParser());
 
 // CORS Configuration
 const allowedOrigins = [env.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'];

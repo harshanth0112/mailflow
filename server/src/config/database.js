@@ -55,3 +55,4 @@ export const closeDatabase = async () => {
     console.log('📦 MongoDB connection closed gracefully');
   }
 };
+

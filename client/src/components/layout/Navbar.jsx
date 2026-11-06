@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Mail, Menu, X, Activity } from 'lucide-react';
+import { Mail, Menu, X, Activity, User, LogOut } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export const Navbar = ({ onToggleSidebar }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 bg-canvas/90 backdrop-blur-md border-b border-border-subtle">
@@ -29,7 +31,7 @@ export const Navbar = ({ onToggleSidebar }) => {
             </span>
           </Link>
           <span className="hidden sm:inline-block font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border border-border-subtle bg-surface text-ink-muted">
-            Phase 1
+            Phase 3
           </span>
         </div>
 
@@ -41,23 +43,58 @@ export const Navbar = ({ onToggleSidebar }) => {
           >
             Overview
           </Link>
-          <a
-            href="#system-status"
-            className="transition-colors hover:text-ink flex items-center gap-1.5"
+          <Link
+            to="/architecture"
+            className={`transition-colors hover:text-ink ${location.pathname === '/architecture' ? 'text-brand-red font-semibold' : ''}`}
           >
-            <Activity className="w-3.5 h-3.5 text-status-success" />
-            API Health
-          </a>
+            Architecture
+          </Link>
+          {isAuthenticated && (
+            <Link
+              to="/dashboard"
+              className={`transition-colors hover:text-ink ${location.pathname === '/dashboard' ? 'text-brand-red font-semibold' : ''}`}
+            >
+              Dashboard
+            </Link>
+          )}
         </nav>
 
-        {/* Right side CTA */}
+        {/* Right side CTA & User Status */}
         <div className="flex items-center gap-3">
-          <Link
-            to="/"
-            className="hidden sm:inline-flex items-center justify-center font-mono uppercase tracking-wider text-xs px-4 py-2 bg-ink text-surface hover:bg-brand-red transition-colors rounded-subtle"
-          >
-            Phase 1 Foundation
-          </Link>
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              <Link
+                to="/dashboard"
+                className="hidden sm:inline-flex items-center gap-2 text-xs font-medium text-slate-200 hover:text-white bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg"
+              >
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{user?.name || user?.email}</span>
+              </Link>
+              <button
+                onClick={logout}
+                className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-red-400 transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                to="/login"
+                className="font-mono uppercase tracking-wider text-xs px-3.5 py-1.5 text-slate-300 hover:text-white transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                to="/register"
+                className="font-mono uppercase tracking-wider text-xs px-3.5 py-1.5 bg-brand-red text-white hover:bg-red-600 transition-colors rounded-subtle shadow-sm"
+              >
+                Get Started
+              </Link>
+            </div>
+          )}
+
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-2 text-ink md:hidden focus:outline-none"
@@ -78,15 +115,54 @@ export const Navbar = ({ onToggleSidebar }) => {
           >
             Overview
           </Link>
-          <a
-            href="#system-status"
+          <Link
+            to="/architecture"
             onClick={() => setMobileMenuOpen(false)}
             className="block text-xs font-mono uppercase tracking-wider text-ink py-1"
           >
-            API Health
-          </a>
+            Architecture
+          </Link>
+          {isAuthenticated ? (
+            <>
+              <Link
+                to="/dashboard"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block text-xs font-mono uppercase tracking-wider text-brand-red py-1"
+              >
+                Dashboard
+              </Link>
+              <button
+                onClick={() => {
+                  logout();
+                  setMobileMenuOpen(false);
+                }}
+                className="block w-full text-left text-xs font-mono uppercase tracking-wider text-red-400 py-1"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <Link
+                to="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block text-xs font-mono uppercase tracking-wider text-slate-300 py-1"
+              >
+                Sign In
+              </Link>
+              <Link
+                to="/register"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block text-xs font-mono uppercase tracking-wider text-brand-red py-1"
+              >
+                Create Account
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </header>
   );
 };
+
+export default Navbar;

@@ -32,3 +32,4 @@ export const ArchitecturePage = () => {
     </div>
   );
 };
+

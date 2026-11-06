@@ -1,8 +1,19 @@
-import { Router } from 'express';
+import express from 'express';
 import healthRoutes from './healthRoutes.js';
+import authRoutes from './authRoutes.js';
+import workspaceRoutes from './workspaceRoutes.js';
+import contactRoutes from './contactRoutes.js';
+import emailAccountRoutes from './emailAccountRoutes.js';
+import campaignRoutes from './campaignRoutes.js';
 
-const router = Router();
+const router = express.Router();
 
-router.use(healthRoutes);
+// Mount sub-routers
+router.use('/health', healthRoutes);
+router.use('/auth', authRoutes);
+router.use('/workspaces', workspaceRoutes);
+router.use('/contacts', contactRoutes);
+router.use('/email-accounts', emailAccountRoutes);
+router.use('/campaigns', campaignRoutes);
 
 export default router;

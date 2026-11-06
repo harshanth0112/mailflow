@@ -19,3 +19,6 @@ export const Card = ({ children, className = '', header, footer, ...props }) => 
     </div>
   );
 };
+
+export default Card;
+
