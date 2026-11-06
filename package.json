@@ -1,0 +1,20 @@
+{
+  "name": "mailflow-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MailFlow - Smart Bulk Email, Campaign Automation & AI Assistant Platform",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm --workspace=server run dev",
+    "dev:client": "npm --workspace=client run dev",
+    "build:client": "npm --workspace=client run build",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
