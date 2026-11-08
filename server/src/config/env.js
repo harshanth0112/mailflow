@@ -73,14 +73,26 @@ const envSchema = z.object({
   // OAuth Providers (Optional in dev, but fully configured)
   GOOGLE_CLIENT_ID: z.string().optional().default(''),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
-  GOOGLE_CALLBACK_URL: z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/google/callback'),
-  GMAIL_SENDER_CALLBACK_URL: z.string().url().optional().default('http://localhost:5000/api/v1/email-accounts/oauth/google/callback'),
+  GOOGLE_CALLBACK_URL: z
+    .preprocess((val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/google/callback')
+    ),
+  GMAIL_SENDER_CALLBACK_URL: z
+    .preprocess((val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.string().url().optional().default('http://localhost:5000/api/v1/email-accounts/oauth/google/callback')
+    ),
   GITHUB_CLIENT_ID: z.string().optional().default(''),
   GITHUB_CLIENT_SECRET: z.string().optional().default(''),
-  GITHUB_CALLBACK_URL: z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/github/callback'),
+  GITHUB_CALLBACK_URL: z
+    .preprocess((val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/github/callback')
+    ),
   MICROSOFT_CLIENT_ID: z.string().optional().default(''),
   MICROSOFT_CLIENT_SECRET: z.string().optional().default(''),
-  MICROSOFT_CALLBACK_URL: z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/microsoft/callback'),
+  MICROSOFT_CALLBACK_URL: z
+    .preprocess((val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/microsoft/callback')
+    ),
   // Redis & Queue Configuration
   REDIS_URL: z.string().optional().default(''),
   REDIS_HOST: z.string().optional().default('127.0.0.1'),
