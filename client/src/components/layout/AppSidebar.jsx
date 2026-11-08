@@ -56,6 +56,7 @@ const NAV_SECTIONS = [
       { label: 'Email Accounts', to: '/workspace/email-accounts', icon: Mail },
       { label: 'Team Members', to: '/workspace/members', icon: UserCog },
       { label: 'Settings', to: '/workspace/settings', icon: Settings },
+      { label: 'Platform Admin', to: '/admin', icon: Shield, adminOnly: true },
     ],
   },
   {
@@ -201,6 +202,7 @@ export const AppSidebar = ({ isOpen, onClose }) => {
               )}
               <div className="space-y-0.5">
                 {section.items.map((item) => {
+                  if (item.adminOnly && user?.role !== 'admin') return null;
                   const Icon = item.icon;
                   return (
                     <NavLink

@@ -1,5 +1,6 @@
 import { BaseEmailProvider } from './BaseEmailProvider.js';
 import { env } from '../../config/env.js';
+import fs from 'fs';
 
 /**
  * Microsoft Outlook / Graph Provider
@@ -124,7 +125,7 @@ export class OutlookProvider extends BaseEmailProvider {
   /**
    * Send email via Microsoft Graph API
    */
-  async sendEmail({ from, to, subject, html, text, accessToken }) {
+  async sendEmail({ from, to, subject, html, text, attachments = [], accessToken }) {
     const payload = {
       message: {
         subject,
@@ -142,6 +143,23 @@ export class OutlookProvider extends BaseEmailProvider {
       },
       saveToSentItems: 'true',
     };
+
+    if (attachments && attachments.length > 0) {
+      payload.message.attachments = attachments.map((att) => {
+        let contentBytes = '';
+        try {
+          if (att.path && fs.existsSync(att.path)) {
+            contentBytes = fs.readFileSync(att.path).toString('base64');
+          }
+        } catch {}
+        return {
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: att.originalName || att.filename,
+          contentType: att.contentType,
+          contentBytes,
+        };
+      });
+    }
 
     const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
       method: 'POST',

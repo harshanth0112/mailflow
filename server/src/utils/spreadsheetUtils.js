@@ -71,9 +71,10 @@ export const parseUploadedSpreadsheet = async (buffer, originalName) => {
  */
 export const sanitizeCell = (val) => {
   if (val === null || val === undefined) return '';
-  let str = String(val).trim();
+  const raw = String(val);
+  let str = raw.trim();
   // Prevent CSV Injection / Formula Execution in Excel
-  if (/^[=+\-@\t\r]/.test(str)) {
+  if (/^[=+\-@\t\r]/.test(raw) || /^[=+\-@\t\r]/.test(str)) {
     str = `'${str}`;
   }
   return str;

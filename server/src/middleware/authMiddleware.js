@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { verifyAccessToken } from '../utils/tokenUtils.js';
 import { User } from '../models/User.js';
 import { sendError } from '../utils/apiResponse.js';
+import { env } from '../config/env.js';
 
 export const requireAuth = async (req, res, next) => {
   try {
@@ -29,15 +30,22 @@ export const requireAuth = async (req, res, next) => {
       } catch (e) {
         user = null;
       }
-    }
 
-    if (!user) {
-      // Fallback dev mock if DB disconnected but valid token signed
+      if (!user) {
+        return sendError(res, 401, 'User account does not exist or has been removed');
+      }
+    } else {
+      // In-memory fallback allowed ONLY in development/test mode when DB is disconnected
+      if (env.NODE_ENV === 'production') {
+        return sendError(res, 503, 'Database service is currently unavailable');
+      }
+
       user = {
         _id: decoded.userId,
         name: decoded.name || 'MailFlow User',
         email: decoded.email,
         role: decoded.role || 'user',
+        status: 'active',
         isVerified: true,
       };
     }

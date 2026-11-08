@@ -18,8 +18,11 @@ import {
   HelpCircle,
   Smartphone,
   Monitor,
+  Paperclip,
+  Trash2,
+  FileText,
 } from 'lucide-react';
-import { previewAudience, sendCampaignTestEmail } from '../../services/api';
+import { previewAudience, sendCampaignTestEmail, uploadAttachments } from '../../services/api';
 
 const createInitialFormData = (campaign, senderAccounts) => ({
   name: campaign?.name || '',
@@ -34,6 +37,7 @@ const createInitialFormData = (campaign, senderAccounts) => ({
   recipientType: campaign?.recipientConfiguration?.type || 'all_eligible',
   groupIds: campaign?.recipientConfiguration?.groupIds || [],
   tags: campaign?.recipientConfiguration?.tags ? campaign.recipientConfiguration.tags.join(', ') : '',
+  attachments: campaign?.attachments || [],
   htmlContent:
     campaign?.htmlContent ||
     '<div style="font-family: sans-serif; line-height: 1.6; color: #1e293b;">\n  <h2>Hello {{firstName}},</h2>\n  <p>We are thrilled to share our latest product updates with {{company}}!</p>\n  <p>Let us know if you have any questions.</p>\n  <p>Best regards,<br/>The MailFlow Team</p>\n</div>',
@@ -75,6 +79,36 @@ export const CampaignComposerModal = ({
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+
+  const handleAttachmentUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setError('');
+    setUploadingAttachment(true);
+    try {
+      const data = new FormData();
+      files.forEach((f) => data.append('files', f));
+      const res = await uploadAttachments(data);
+      const newAtts = res.data?.attachments || [];
+      setFormData((prev) => ({
+        ...prev,
+        attachments: [...(prev.attachments || []), ...newAtts],
+      }));
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Attachment upload failed');
+    } finally {
+      setUploadingAttachment(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeAttachment = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter((_, i) => i !== index),
+    }));
+  };
 
   // Fetch Audience preview when configuration changes
   useEffect(() => {
@@ -167,6 +201,7 @@ export const CampaignComposerModal = ({
       replyTo: formData.replyTo.trim(),
       htmlContent: formData.htmlContent,
       textContent: formData.textContent,
+      attachments: formData.attachments || [],
       templateId: formData.templateId || null,
       recipientConfiguration: {
         type: formData.recipientType,
@@ -654,6 +689,32 @@ export const CampaignComposerModal = ({
                   />
                 </div>
               </div>
+
+              {/* Campaign Attachments Review */}
+              {(formData.attachments || []).length > 0 && (
+                <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-950/60">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Paperclip className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="text-xs font-semibold text-slate-300">
+                      Attached Files ({formData.attachments.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.attachments.map((att, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-[11px] text-slate-300"
+                      >
+                        <FileText className="w-3 h-3 text-slate-400" />
+                        <span className="max-w-[120px] truncate">{att.originalName || att.filename}</span>
+                        <span className="text-slate-500 text-[10px]">
+                          ({Math.round((att.size || 0) / 1024)} KB)
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -775,6 +836,32 @@ export const CampaignComposerModal = ({
                   </span>
                 </div>
               </div>
+
+              {/* Campaign Attachments Review */}
+              {(formData.attachments || []).length > 0 && (
+                <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-950/60">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Paperclip className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="text-xs font-semibold text-slate-300">
+                      Attached Files ({formData.attachments.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.attachments.map((att, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-[11px] text-slate-300"
+                      >
+                        <FileText className="w-3 h-3 text-slate-400" />
+                        <span className="max-w-[120px] truncate">{att.originalName || att.filename}</span>
+                        <span className="text-slate-500 text-[10px]">
+                          ({Math.round((att.size || 0) / 1024)} KB)
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

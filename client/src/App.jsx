@@ -32,6 +32,7 @@ import { AnalyticsPage } from './pages/analytics/AnalyticsPage';
 import { ActivityPage } from './pages/activity/ActivityPage';
 import { NotificationsPage } from './pages/notifications/NotificationsPage';
 import { HelpPage } from './pages/help/HelpPage';
+import { AdminPage } from './pages/admin/AdminPage';
 
 // Route Guards & Providers
 import { ProtectedRoute, PublicOnlyRoute } from './components/auth/RouteGuard';
@@ -117,6 +118,7 @@ export default function App() {
               <Route path="analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
               <Route path="activity" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>} />
               <Route path="notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+              <Route path="admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
               <Route path="help" element={<ProtectedRoute><HelpPage /></ProtectedRoute>} />
 
               {/* 404 */}

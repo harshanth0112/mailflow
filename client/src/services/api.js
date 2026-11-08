@@ -210,4 +210,35 @@ export const getAuditLogs = (params) => api.get('/analytics/audit-logs', { param
 export const exportCampaignsAnalyticsUrl = () =>
   `${API_BASE_URL}/analytics/export/campaigns`;
 
+// Attachments endpoints (Phase 2)
+export const uploadAttachments = (formData) =>
+  api.post('/attachments/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+export const deleteAttachment = (filename) =>
+  api.delete(`/attachments/${filename}`);
+
+// Notifications endpoints (Phase 3)
+export const getNotifications = (params) => api.get('/notifications', { params });
+export const getUnreadNotificationCount = () => api.get('/notifications/unread-count');
+export const markNotificationAsRead = (id) => api.patch(`/notifications/${id}/read`);
+export const markAllNotificationsAsRead = () => api.patch('/notifications/read-all');
+
+// Admin Console endpoints (Phase 3)
+export const getAdminOverview = () => api.get('/admin/overview');
+export const getAdminUsers = (params) => api.get('/admin/users', { params });
+export const getAdminUserDetails = (id) => api.get(`/admin/users/${id}`);
+export const updateAdminUserStatus = (id, data) => api.patch(`/admin/users/${id}/status`, data);
+export const updateAdminUserRole = (id, data) => api.patch(`/admin/users/${id}/role`, data);
+export const getAdminQueues = () => api.get('/admin/queues');
+export const retryAdminQueueJobs = (queueName) => api.post(`/admin/queues/${queueName}/retry-failed`);
+
+// AI Assistant endpoints (Phase 4)
+export const getChatConversations = () => api.get('/chat/conversations');
+export const createChatConversation = (data) => api.post('/chat/conversations', data);
+export const getChatMessages = (id) => api.get(`/chat/conversations/${id}`);
+export const sendChatMessage = (id, data) => api.post(`/chat/conversations/${id}/messages`, data);
+export const deleteChatConversation = (id) => api.delete(`/chat/conversations/${id}`);
+export const runAiQuickAction = (data) => api.post('/chat/quick-action', data);
+
 export default api;

@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { AppSidebar } from './AppSidebar';
 import { OnboardingTour } from '../onboarding/OnboardingTour';
+import { AiChatWidget } from '../chat/AiChatWidget';
 import { useAuth } from '../../context/AuthContext';
 
 // Pages that use the full-width app sidebar layout (authenticated dashboard)
@@ -19,6 +20,8 @@ const DASHBOARD_PATHS = [
   '/settings',
   '/workspace',
   '/compose',
+  '/admin',
+  '/help',
 ];
 
 const isDashboardRoute = (pathname) =>
@@ -35,6 +38,9 @@ export const AppShell = () => {
     <div className="min-h-screen bg-canvas text-ink font-sans">
       {/* Onboarding Tour (overlay, only shown when needed) */}
       {isAuthenticated && <OnboardingTour />}
+
+      {/* Floating AI Assistant Chatbot */}
+      {isAuthenticated && <AiChatWidget />}
 
       {showDashboardLayout ? (
         // --- Dashboard layout: sidebar + content, no top navbar ---

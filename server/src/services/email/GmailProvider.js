@@ -201,7 +201,7 @@ export class GmailProvider extends BaseEmailProvider {
   /**
    * Send email using Gmail OAuth2 Transport (Nodemailer OAuth2)
    */
-  async sendEmail({ from, to, subject, html, text, accessToken, refreshToken }) {
+  async sendEmail({ from, to, subject, html, text, attachments = [], accessToken, refreshToken }) {
     // Construct Nodemailer OAuth2 transporter
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -216,13 +216,23 @@ export class GmailProvider extends BaseEmailProvider {
     });
 
     try {
-      const info = await transporter.sendMail({
+      const mailOptions = {
         from,
         to,
         subject,
         html,
         text,
-      });
+      };
+
+      if (attachments && attachments.length > 0) {
+        mailOptions.attachments = attachments.map((att) => ({
+          filename: att.originalName || att.filename,
+          path: att.path,
+          contentType: att.contentType,
+        }));
+      }
+
+      const info = await transporter.sendMail(mailOptions);
 
       return {
         success: true,

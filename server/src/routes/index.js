@@ -9,6 +9,12 @@ import automationRoutes from './automationRoutes.js';
 import autoReplyRoutes from './autoReplyRoutes.js';
 import analyticsRoutes from './analyticsRoutes.js';
 import emailTemplateRoutes from './emailTemplateRoutes.js';
+import trackingRoutes from './trackingRoutes.js';
+import attachmentRoutes from './attachmentRoutes.js';
+import webhookRoutes from './webhookRoutes.js';
+import notificationRoutes from './notificationRoutes.js';
+import adminRoutes from './adminRoutes.js';
+import chatRoutes from './chatRoutes.js';
 import { apiLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
@@ -27,5 +33,11 @@ router.use('/templates', emailTemplateRoutes);
 router.use('/automations', automationRoutes);
 router.use('/auto-reply', autoReplyRoutes);
 router.use('/analytics', analyticsRoutes);
+router.use('/track', trackingRoutes);
+router.use('/attachments', attachmentRoutes);
+router.use('/webhooks', webhookRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/admin', adminRoutes);
+router.use('/chat', chatRoutes);
 
 export default router;

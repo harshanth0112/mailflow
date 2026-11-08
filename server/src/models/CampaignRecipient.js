@@ -61,6 +61,27 @@ const campaignRecipientSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    trackingToken: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    openedAt: {
+      type: Date,
+      default: null,
+    },
+    openCount: {
+      type: Number,
+      default: 0,
+    },
+    clickedAt: {
+      type: Date,
+      default: null,
+    },
+    clickCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

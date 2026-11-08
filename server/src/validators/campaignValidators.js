@@ -8,6 +8,14 @@ export const recipientConfigSchema = z.object({
   contactIds: z.array(z.string()).max(1000, 'Cannot specify more than 1000 contact IDs').optional().default([]),
 });
 
+export const attachmentInputSchema = z.object({
+  filename: z.string(),
+  originalName: z.string(),
+  path: z.string(),
+  contentType: z.string(),
+  size: z.number().nonnegative(),
+});
+
 export const campaignCreateSchema = z.object({
   name: z
     .string({ error: (issue) => issue.input === undefined ? 'Campaign name is required' : undefined })
@@ -25,6 +33,7 @@ export const campaignCreateSchema = z.object({
   replyTo: z.string().email('Valid reply-to email required').optional().or(z.literal('')).default(''),
   htmlContent: z.string().optional().default(''),
   textContent: z.string().optional().default(''),
+  attachments: z.array(attachmentInputSchema).max(5).optional().default([]),
   templateId: z.string().optional().nullable(),
   recipientConfiguration: recipientConfigSchema.optional().prefault({}),
   scheduledAt: z.string().datetime().optional().nullable(),

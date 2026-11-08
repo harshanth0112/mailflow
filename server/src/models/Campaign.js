@@ -51,6 +51,17 @@ const recipientConfigSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const attachmentSchema = new mongoose.Schema(
+  {
+    filename: { type: String, required: true },
+    originalName: { type: String, required: true },
+    path: { type: String, required: true },
+    contentType: { type: String, required: true },
+    size: { type: Number, required: true },
+  },
+  { _id: true }
+);
+
 const campaignStatisticsSchema = new mongoose.Schema(
   {
     totalRecipients: { type: Number, default: 0 },
@@ -133,6 +144,7 @@ const campaignSchema = new mongoose.Schema(
       ref: 'EmailTemplate',
       default: null,
     },
+    attachments: [attachmentSchema],
     recipientConfiguration: {
       type: recipientConfigSchema,
       default: () => ({}),

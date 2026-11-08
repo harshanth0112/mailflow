@@ -9,6 +9,9 @@ import { EmailAccount } from '../models/EmailAccount.js';
 import { getCampaignEmailProvider } from '../services/email/campaignEmailProvider.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
 import { personalizeContent } from '../utils/templatePersonalizer.js';
+import { generateRandomToken } from '../utils/tokenUtils.js';
+import { trackingService } from '../services/trackingService.js';
+import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
 let dispatchWorker = null;
@@ -113,10 +116,20 @@ export const processCampaignDispatch = async (job) => {
             isHtml: false,
           });
 
+          const trackingToken = recipient.trackingToken || generateRandomToken(24);
+          recipient.trackingToken = trackingToken;
+
+          const rawHtml = campaign.htmlContent || `<p>${campaign.textContent || ''}</p>`;
           const personalizedHtml = personalizeContent({
-            content: campaign.htmlContent || `<p>${campaign.textContent || ''}</p>`,
+            content: rawHtml,
             contact,
             isHtml: true,
+          });
+
+          const trackedHtml = trackingService.injectTracking({
+            html: personalizedHtml,
+            trackingToken,
+            baseUrl: env.API_BASE_URL || 'http://localhost:5000',
           });
 
           const personalizedText = personalizeContent({
@@ -125,13 +138,14 @@ export const processCampaignDispatch = async (job) => {
             isHtml: false,
           });
 
-          // 3. Dispatch through Phase 7 provider
+          // 3. Dispatch through provider with attachments support
           const result = await provider.sendEmail({
             from: senderAccount.emailAddress,
             to: recipient.email,
             subject: personalizedSubject,
-            html: personalizedHtml,
+            html: trackedHtml,
             text: personalizedText,
+            attachments: campaign.attachments || [],
             accessToken,
             refreshToken,
           });

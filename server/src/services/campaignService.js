@@ -11,6 +11,7 @@ import { getQueue, QUEUE_NAMES } from '../queues/queueManager.js';
 import { isQueueWorkerReady } from '../config/redis.js';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/apiResponse.js';
+import { escapeRegex } from '../utils/regexUtils.js';
 
 const requireProductionQueueWorker = async () => {
   if (env.NODE_ENV !== 'production') return;
@@ -160,7 +161,8 @@ export const campaignService = {
       const filter = { workspaceId };
       if (status) filter.status = status;
       if (search && search.trim() !== '') {
-        const regex = new RegExp(search.trim(), 'i');
+        const safeSearch = escapeRegex(search.trim());
+        const regex = new RegExp(safeSearch, 'i');
         filter.$or = [{ name: regex }, { subject: regex }];
       }
 
@@ -513,7 +515,13 @@ export const campaignService = {
           { jobId: `campaign-dispatch-${campaign._id.toString()}-${assignedKey}` }
         );
       } catch (redisErr) {
-        console.warn(`Campaign dispatch could not be confirmed (${redisErr.name}).`);
+        console.warn(`Campaign dispatch could not be confirmed (${redisErr.name}). Rolling back queued state.`);
+        campaign.status = CAMPAIGN_STATUS.DRAFT;
+        campaign.startedAt = null;
+        campaign.sendIdempotencyKey = null;
+        await campaign.save();
+        await CampaignRecipient.deleteMany({ campaignId: campaign._id });
+
         if (env.NODE_ENV === 'production') {
           throw new ApiError(
             503,
@@ -599,7 +607,11 @@ export const campaignService = {
           }
         );
       } catch (redisErr) {
-        console.warn(`Campaign schedule could not be confirmed (${redisErr.name}).`);
+        console.warn(`Campaign schedule could not be confirmed (${redisErr.name}). Rolling back scheduled state.`);
+        campaign.status = CAMPAIGN_STATUS.DRAFT;
+        campaign.scheduledAt = null;
+        await campaign.save();
+
         if (env.NODE_ENV === 'production') {
           throw new ApiError(
             503,

@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS, CONTACT_SOURCES } from '../models/Contact.js';
 import { ContactGroup } from '../models/ContactGroup.js';
 import { parseUploadedSpreadsheet, isValidEmail, sanitizeCell } from '../utils/spreadsheetUtils.js';
+import { escapeRegex } from '../utils/regexUtils.js';
 
 // In-memory fallback map for offline test/dev environments
 export const devContacts = new Map();
@@ -38,7 +39,8 @@ export const contactService = {
       }
 
       if (search && search.trim() !== '') {
-        const regex = new RegExp(search.trim(), 'i');
+        const safeSearch = escapeRegex(search.trim());
+        const regex = new RegExp(safeSearch, 'i');
         filter.$or = [
           { email: regex },
           { firstName: regex },
@@ -310,9 +312,10 @@ export const contactService = {
     const trimmedName = data.name.trim();
 
     if (mongoose.connection.readyState === 1) {
+      const safeName = escapeRegex(trimmedName);
       const existing = await ContactGroup.findOne({
         workspaceId,
-        name: { $regex: new RegExp(`^${trimmedName}$`, 'i') },
+        name: { $regex: new RegExp(`^${safeName}$`, 'i') },
       });
       if (existing) {
         throw new Error(`Group with name "${data.name}" already exists in this workspace.`);
@@ -357,10 +360,11 @@ export const contactService = {
       if (!group) throw new Error('Group not found in this workspace.');
 
       if (data.name && data.name.trim() !== group.name) {
+        const safeName = escapeRegex(data.name.trim());
         const existing = await ContactGroup.findOne({
           workspaceId,
           _id: { $ne: groupId },
-          name: { $regex: new RegExp(`^${data.name.trim()}$`, 'i') },
+          name: { $regex: new RegExp(`^${safeName}$`, 'i') },
         });
         if (existing) {
           throw new Error(`Group with name "${data.name}" already exists.`);
