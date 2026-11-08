@@ -276,7 +276,7 @@ export const DashboardPage = () => {
               iconColor="text-emerald-400"
               iconBg="bg-emerald-500/10"
               label="Connect Email"
-              description="Link a Gmail or Outlook account"
+              description="Link a Google account"
               to="/workspace/settings"
             />
             <QuickAction

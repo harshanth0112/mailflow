@@ -55,7 +55,7 @@ const USER_STEPS = [
     iconColor: 'text-emerald-400',
     iconBg: 'bg-emerald-500/10',
     description:
-      'Connect your Gmail or Outlook account to start sending campaigns. MailFlow uses secure OAuth and SMTP to send on your behalf — no password sharing required.',
+      'Connect your Google account to start sending campaigns. MailFlow uses secure OAuth to send on your behalf — no password sharing required.',
     highlight: 'email-accounts',
     action: { label: 'View Email Settings', path: '/settings/email-accounts' },
   },
@@ -179,7 +179,7 @@ const ADMIN_STEPS = [
     iconColor: 'text-blue-400',
     iconBg: 'bg-blue-500/10',
     description:
-      'Connect Gmail or Outlook accounts to power your team\'s campaigns. Credentials are stored encrypted and scoped to your workspace. Each account can be disconnected at any time.',
+      'Connect Google accounts to power your team\'s campaigns. Credentials are stored encrypted and scoped to your workspace. Each account can be disconnected at any time.',
     highlight: 'email-accounts',
     action: { label: 'Email Accounts', path: '/settings/email-accounts' },
   },

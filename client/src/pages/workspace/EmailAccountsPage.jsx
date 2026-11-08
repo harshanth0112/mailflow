@@ -242,7 +242,7 @@ export const EmailAccountsPage = () => {
             <Mail className="w-10 h-10 text-slate-600 mx-auto mb-2" />
             <p className="text-sm font-semibold text-slate-300">No mailboxes connected yet</p>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Authorize a Gmail or Outlook account below to send campaigns from your verified address.
+              Authorize a Google account below to send campaigns from your verified address.
             </p>
           </Card>
         ) : (
@@ -382,7 +382,9 @@ export const EmailAccountsPage = () => {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {providers.map((p) => (
+          {providers
+            .filter((p) => p.isConfigured || p.id === 'gmail')
+            .map((p) => (
             <Card
               key={p.id}
               className="border-slate-800 bg-slate-900 p-5 space-y-4 hover:border-slate-700 transition-colors"

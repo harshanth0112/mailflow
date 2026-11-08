@@ -20,19 +20,19 @@ services:
       - key: ENCRYPTION_KEY
         sync: false
       - key: EMAIL_PROVIDER
-        value: disabled
-      - key: RESEND_API_KEY
-        sync: false
+        value: sendliberty
       - key: SENDLIBERTY_API_KEY
         sync: false
       - key: SENDLIBERTY_FROM_EMAIL
         sync: false
       - key: CAMPAIGN_EMAIL_PROVIDER
-        value: mailbox
-      - key: SMTP_FROM_EMAIL
+        value: sendliberty
+      - key: GOOGLE_CLIENT_ID
         sync: false
-      - key: SMTP_FROM_NAME
-        value: MailFlow
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
       - key: COOKIE_SAME_SITE
         value: none
       - key: QUEUE_FEATURES_ENABLED

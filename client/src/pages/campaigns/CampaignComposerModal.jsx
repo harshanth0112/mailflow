@@ -462,7 +462,7 @@ export const CampaignComposerModal = ({
                   </label>
                   {senderAccounts.length === 0 ? (
                     <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
-                      No connected email accounts available in this workspace. Please connect a Gmail or Outlook account in Email Accounts settings first.
+                      No connected email accounts available in this workspace. Please connect a Google account in Email Accounts settings first.
                     </div>
                   ) : (
                     <select

@@ -325,7 +325,7 @@ export const AutoReplyPage = () => {
           <Mail className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <h3 className="text-sm font-bold text-white mb-1">No email accounts connected</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
-            Connect a Gmail or Outlook mailbox first in Email Accounts to configure automatic replies.
+            Connect a Google mailbox first in Email Accounts to configure automatic replies.
           </p>
           <Button
             variant="primary"
