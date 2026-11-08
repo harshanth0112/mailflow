@@ -25,7 +25,7 @@ import {
 import { previewAudience, sendCampaignTestEmail, uploadAttachments } from '../../services/api';
 
 const createInitialFormData = (campaign, senderAccounts = []) => {
-  const activeSenders = senderAccounts.filter((acc) => !acc.connectionStatus || acc.connectionStatus === 'connected');
+  const activeSenders = senderAccounts.filter((acc) => !acc.connectionStatus || acc.connectionStatus.toLowerCase() === 'connected');
   const defaultSenderId =
     campaign?.senderEmailAccountId?._id ||
     campaign?.senderEmailAccountId ||

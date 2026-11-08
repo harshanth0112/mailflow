@@ -98,6 +98,17 @@ export const CampaignsPage = () => {
     }
   }, []);
 
+  // Re-fetch sender accounts whenever the composer opens so a freshly
+  // connected OAuth account is always available for selection.
+  const refreshSenderAccounts = useCallback(async () => {
+    try {
+      const accRes = await getConnectedEmailAccounts().catch(() => ({ data: [] }));
+      setSenderAccounts(accRes.data || []);
+    } catch (err) {
+      console.error('Failed to refresh sender accounts:', err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCampaigns();
   }, [fetchCampaigns]);
@@ -190,6 +201,7 @@ export const CampaignsPage = () => {
               size="sm"
               onClick={() => {
                 setEditingCampaign(null);
+                refreshSenderAccounts();
                 setIsComposerOpen(true);
               }}
               className="bg-indigo-600 hover:bg-indigo-500 text-white"
@@ -370,6 +382,7 @@ export const CampaignsPage = () => {
                                 <button
                                   onClick={() => {
                                     setEditingCampaign(camp);
+                                    refreshSenderAccounts();
                                     setIsComposerOpen(true);
                                   }}
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
