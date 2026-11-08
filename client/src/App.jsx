@@ -9,6 +9,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 // Auth Pages
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { OAuthCallbackPage } from './pages/auth/OAuthCallbackPage';
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage';
 import { ResendVerificationPage } from './pages/auth/ResendVerificationPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
@@ -63,6 +64,7 @@ export default function App() {
               }
             />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/auth/callback" element={<OAuthCallbackPage />} />
             <Route path="/resend-verification" element={<ResendVerificationPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />

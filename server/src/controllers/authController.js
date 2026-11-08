@@ -17,6 +17,7 @@ import { authEmailService } from '../services/authEmailService.js';
 import { createDefaultWorkspaceForUser } from '../services/workspaceService.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 import { logger } from '../utils/logger.js';
+import { googleAuthService } from '../services/googleAuthService.js';
 
 // In-memory fallback stores for local development without active MongoDB
 const devUsers = new Map();
@@ -651,4 +652,204 @@ export const getOAuthStatus = (req, res) => {
     },
     message: 'OAuth endpoints are structured and ready for provider client credentials',
   });
+};
+
+/**
+ * Initiate Google OAuth SSO Flow
+ * GET /api/v1/auth/oauth/google
+ */
+export const initiateGoogleOAuth = (req, res) => {
+  try {
+    if (!googleAuthService.isConfigured()) {
+      return sendError(res, 503, 'Google OAuth client ID is not configured in .env');
+    }
+
+    const { redirectUri } = req.query;
+    const { url } = googleAuthService.initiateAuth({ redirectUri });
+    return res.redirect(url);
+  } catch (error) {
+    return sendError(res, 400, error.message || 'Failed to initiate Google authentication');
+  }
+};
+
+/**
+ * Handle Google OAuth SSO Callback
+ * GET /api/v1/auth/oauth/google/callback
+ */
+export const handleGoogleOAuthCallback = async (req, res, next) => {
+  const clientUrl = env.CLIENT_URL || 'http://localhost:5173';
+
+  try {
+    const { code, state, error, error_description } = req.query;
+
+    if (error) {
+      logger.warn('Google OAuth provider returned an error', { error, error_description });
+      const message = encodeURIComponent(error_description || error || 'Google authentication was cancelled.');
+      return res.redirect(`${clientUrl}/login?error=${message}`);
+    }
+
+    if (!code || !state) {
+      const message = encodeURIComponent('Missing OAuth authorization code or state parameter.');
+      return res.redirect(`${clientUrl}/login?error=${message}`);
+    }
+
+    // Exchange authorization code for verified Google profile
+    let googleUser;
+    try {
+      googleUser = await googleAuthService.exchangeCodeForUser({ code, state });
+    } catch (exchangeErr) {
+      logger.warn('Google OAuth code exchange failed', { errorName: exchangeErr.name, message: exchangeErr.message });
+      const message = encodeURIComponent(exchangeErr.message || 'Failed to authenticate with Google.');
+      return res.redirect(`${clientUrl}/login?error=${message}`);
+    }
+
+    const { googleId, email, name } = googleUser;
+
+    let user = null;
+    if (isDbConnected()) {
+      // 1. Check if user exists by googleId
+      user = await User.findOne({ 'oauth.googleId': googleId });
+
+      if (!user) {
+        // 2. Check if user exists with the same verified email
+        user = await User.findOne({ email });
+
+        if (user) {
+          // Safe linking: user exists with this email, link googleId if verified
+          if (!user.oauth) user.oauth = {};
+          user.oauth.googleId = googleId;
+          user.isVerified = true;
+          if (user.status === 'pending_verification') {
+            user.status = 'active';
+          }
+          await user.save();
+        } else {
+          // 3. New user registration via Google SSO
+          user = await User.create({
+            name,
+            email,
+            isVerified: true,
+            status: 'active',
+            oauth: {
+              googleId,
+            },
+          });
+
+          // Automatically provision default workspace
+          try {
+            await createDefaultWorkspaceForUser(user);
+          } catch (wsErr) {
+            logger.error('Workspace provisioning failed during Google registration', {
+              errorName: wsErr.name,
+            });
+          }
+
+          // Send welcome email asynchronously
+          authEmailService.sendWelcomeEmail(user).catch((err) =>
+            logger.warn('Failed to send welcome email for Google user', { errorName: err.name })
+          );
+        }
+      }
+    } else {
+      // In-memory fallback for local dev / mock mode
+      let foundUser = null;
+      for (const devU of devUsers.values()) {
+        if (devU.oauth?.googleId === googleId || devU.email === email) {
+          foundUser = devU;
+          break;
+        }
+      }
+
+      if (foundUser) {
+        if (!foundUser.oauth) foundUser.oauth = {};
+        foundUser.oauth.googleId = googleId;
+        foundUser.isVerified = true;
+        if (foundUser.status === 'pending_verification') {
+          foundUser.status = 'active';
+        }
+        user = foundUser;
+      } else {
+        const newId = new mongoose.Types.ObjectId();
+        user = {
+          _id: newId,
+          name,
+          email,
+          role: 'user',
+          status: 'active',
+          isVerified: true,
+          oauth: { googleId },
+          toSafeObject() {
+            return {
+              _id: this._id,
+              name: this.name,
+              email: this.email,
+              role: this.role,
+              status: this.status,
+              isVerified: this.isVerified,
+            };
+          },
+        };
+        devUsers.set(email, user);
+        try {
+          await createDefaultWorkspaceForUser(user);
+        } catch (wsErr) {
+          // In-memory workspace fallback handled inside workspaceService
+        }
+      }
+    }
+
+    if (user.status === 'suspended' || user.status === 'deactivated') {
+      const message = encodeURIComponent('Your account has been suspended or deactivated.');
+      return res.redirect(`${clientUrl}/login?error=${message}`);
+    }
+
+    // Issue standard JWT tokens
+    const tokenPayload = {
+      userId: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+    const accessToken = signAccessToken(tokenPayload);
+
+    // Issue refresh token (7d)
+    const rawRefreshToken = generateRandomToken(40);
+    const refreshTokenHash = hashToken(rawRefreshToken);
+    const refreshTokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const clientIp = req.ip || req.connection?.remoteAddress || '';
+    const userAgent = req.headers['user-agent'] || '';
+
+    if (isDbConnected()) {
+      await Session.create({
+        userId: user._id,
+        refreshTokenHash,
+        userAgent,
+        ipAddress: clientIp,
+        expiresAt: refreshTokenExpiresAt,
+      });
+
+      user.lastLoginAt = new Date();
+      user.lastLoginIp = clientIp;
+      await user.save();
+    } else {
+      devSessions.set(refreshTokenHash, {
+        userId: user._id.toString(),
+        expiresAt: refreshTokenExpiresAt,
+        revokedAt: null,
+      });
+      user.lastLoginAt = new Date();
+      user.lastLoginIp = clientIp;
+    }
+
+    // Set secure HttpOnly cookie for refresh token
+    res.cookie('refreshToken', rawRefreshToken, getRefreshTokenCookieOptions());
+
+    // Redirect to frontend auth callback route with access token
+    return res.redirect(`${clientUrl}/auth/callback?token=${accessToken}`);
+  } catch (error) {
+    logger.error('Unhandled error during Google OAuth callback', { errorName: error.name, message: error.message });
+    const message = encodeURIComponent('An unexpected error occurred during Google authentication.');
+    return res.redirect(`${clientUrl}/login?error=${message}`);
+  }
 };

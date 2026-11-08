@@ -79,6 +79,19 @@ router.get(
   authController.getOAuthStatus
 );
 
+// Google OAuth SSO Endpoints
+router.get(
+  '/oauth/google',
+  authLimiter,
+  authController.initiateGoogleOAuth
+);
+
+router.get(
+  '/oauth/google/callback',
+  authLimiter,
+  authController.handleGoogleOAuthCallback
+);
+
 // Protected Authentication Endpoints (Requires valid JWT Access Token)
 router.get(
   '/me',

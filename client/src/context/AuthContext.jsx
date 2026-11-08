@@ -55,6 +55,22 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
+  const setAuthSession = async (accessToken) => {
+    setToken(accessToken);
+    localStorage.setItem('mailflow_token', accessToken);
+    try {
+      const res = await getMyProfile();
+      if (res?.data) {
+        setUser(res.data);
+        localStorage.setItem('mailflow_user', JSON.stringify(res.data));
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('Failed to load profile for new session:', err.message);
+      throw err;
+    }
+  };
+
   const register = async (name, email, password, termsAccepted) => {
     const res = await apiRegister({ name, email, password, termsAccepted });
     return res;
@@ -101,6 +117,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         isAuthenticated: !!user && !!token,
         login,
+        setAuthSession,
         register,
         logout,
         updateUserProfile,

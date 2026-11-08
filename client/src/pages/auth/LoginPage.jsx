@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { API_BASE_URL } from '../../services/api';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
@@ -16,6 +17,14 @@ export const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    if (errorParam) {
+      setError(errorParam);
+    }
+  }, [searchParams]);
 
   const from = location.state?.from?.pathname || '/dashboard';
 
@@ -182,8 +191,10 @@ export const LoginPage = () => {
             <div className="mt-6 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setError('Google OAuth client ID is awaiting your configuration in .env')}
-                className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-slate-800 rounded-lg shadow-sm bg-slate-950 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                onClick={() => {
+                  window.location.href = `${API_BASE_URL}/auth/oauth/google`;
+                }}
+                className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-slate-800 rounded-lg shadow-sm bg-slate-950 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
               >
                 <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
                   <path
