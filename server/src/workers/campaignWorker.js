@@ -5,7 +5,7 @@ import { QUEUE_NAMES } from '../queues/queueManager.js';
 import { Campaign, CAMPAIGN_STATUS } from '../models/Campaign.js';
 import { CampaignRecipient, RECIPIENT_STATUS } from '../models/CampaignRecipient.js';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS } from '../models/Contact.js';
-import { EmailAccount } from '../models/EmailAccount.js';
+import { EmailAccount, CONNECTION_STATUS } from '../models/EmailAccount.js';
 import { emailAccountService } from '../services/emailAccountService.js';
 import { getCampaignEmailProvider } from '../services/email/campaignEmailProvider.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
