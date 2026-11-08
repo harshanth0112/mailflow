@@ -129,6 +129,7 @@ export class GmailProvider extends BaseEmailProvider {
 
     return {
       accessToken: data.access_token,
+      refreshToken: data.refresh_token || null,
       expiresIn: data.expires_in,
       tokenExpiresAt: new Date(Date.now() + (data.expires_in || 3600) * 1000),
     };

@@ -6,6 +6,7 @@ import { Campaign, CAMPAIGN_STATUS } from '../models/Campaign.js';
 import { CampaignRecipient, RECIPIENT_STATUS } from '../models/CampaignRecipient.js';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS } from '../models/Contact.js';
 import { EmailAccount } from '../models/EmailAccount.js';
+import { emailAccountService } from '../services/emailAccountService.js';
 import { getCampaignEmailProvider } from '../services/email/campaignEmailProvider.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
 import { personalizeContent } from '../utils/templatePersonalizer.js';
@@ -56,8 +57,8 @@ export const processCampaignDispatch = async (job) => {
 
   const provider = getCampaignEmailProvider(senderAccount);
   const isSendliberty = provider.name === 'sendliberty';
-  const accessToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedAccessToken);
-  const refreshToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedRefreshToken);
+  const accessToken = isSendliberty ? undefined : await emailAccountService.ensureValidToken(senderAccount);
+  const refreshToken = isSendliberty ? undefined : (senderAccount.encryptedRefreshToken ? decryptToken(senderAccount.encryptedRefreshToken) : undefined);
 
   // Load pending recipient records for this campaign
   const pendingRecipients = await CampaignRecipient.find({

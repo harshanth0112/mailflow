@@ -3,6 +3,7 @@ import { Campaign, CAMPAIGN_STATUS, RECIPIENT_SELECTION_TYPE } from '../models/C
 import { CampaignRecipient, RECIPIENT_STATUS } from '../models/CampaignRecipient.js';
 import { Contact, CONSENT_STATUS, CONTACT_STATUS } from '../models/Contact.js';
 import { EmailAccount, CONNECTION_STATUS } from '../models/EmailAccount.js';
+import { emailAccountService } from './emailAccountService.js';
 import { getCampaignEmailProvider } from './email/campaignEmailProvider.js';
 import { decryptToken } from '../utils/cryptoUtils.js';
 import { personalizeContent } from '../utils/templatePersonalizer.js';
@@ -385,29 +386,9 @@ export const campaignService = {
     const provider = getCampaignEmailProvider(senderAccount);
     const isSendliberty = provider.name === 'sendliberty';
 
-    let accessToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedAccessToken);
-    let refreshToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedRefreshToken);
-
-    // Refresh token proactively if expired
-    if (!isSendliberty && senderAccount.tokenExpiresAt && new Date() >= new Date(senderAccount.tokenExpiresAt)) {
-      if (!refreshToken) {
-        senderAccount.connectionStatus = CONNECTION_STATUS.EXPIRED;
-        if (senderAccount.save) await senderAccount.save();
-        throw new Error('Sender access token expired and no refresh token is available. Please reauthorize.');
-      }
-
-      try {
-        const refreshed = await provider.refreshAccessToken(refreshToken);
-        accessToken = refreshed.accessToken;
-        senderAccount.encryptedAccessToken = (await import('../utils/cryptoUtils.js')).encryptToken(refreshed.accessToken);
-        senderAccount.tokenExpiresAt = refreshed.tokenExpiresAt;
-        if (senderAccount.save) await senderAccount.save();
-      } catch (refreshErr) {
-        senderAccount.connectionStatus = refreshErr.isRevoked ? CONNECTION_STATUS.REVOKED : CONNECTION_STATUS.ERROR;
-        if (senderAccount.save) await senderAccount.save();
-        throw new Error(`Failed to refresh mailbox credentials: ${refreshErr.message}`);
-      }
-    }
+    // Proactively verify and refresh OAuth access token before test email dispatch
+    const accessToken = isSendliberty ? undefined : await emailAccountService.ensureValidToken(senderAccount);
+    const refreshToken = isSendliberty ? undefined : (senderAccount.encryptedRefreshToken ? decryptToken(senderAccount.encryptedRefreshToken) : undefined);
 
     // Mock contact for placeholder replacement in preview
     const sampleContact = {

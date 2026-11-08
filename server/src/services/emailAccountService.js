@@ -10,6 +10,19 @@ export const devEmailAccounts = new Map();
 // In-memory store for pending OAuth states to prevent CSRF
 export const oauthStateStore = new Map(); // state -> { workspaceId, userId, provider, expiresAt }
 
+/**
+ * Strips sensitive token fields from email account objects before returning to API or clients
+ */
+export const sanitizeAccount = (account) => {
+  if (!account) return null;
+  const obj = typeof account.toObject === 'function' ? account.toObject() : { ...account };
+  delete obj.encryptedAccessToken;
+  delete obj.encryptedRefreshToken;
+  delete obj.accessToken;
+  delete obj.refreshToken;
+  return obj;
+};
+
 export const emailAccountService = {
   /**
    * List connected email accounts for a workspace
@@ -18,9 +31,9 @@ export const emailAccountService = {
     if (mongoose.connection.readyState === 1) {
       return await EmailAccount.find({ workspaceId }).sort({ createdAt: -1 });
     }
-    return Array.from(devEmailAccounts.values()).filter(
-      (acc) => acc.workspaceId.toString() === workspaceId.toString()
-    );
+    return Array.from(devEmailAccounts.values())
+      .filter((acc) => acc.workspaceId.toString() === workspaceId.toString())
+      .map(sanitizeAccount);
   },
 
   /**
@@ -32,7 +45,7 @@ export const emailAccountService = {
     }
     const acc = devEmailAccounts.get(accountId);
     if (acc && acc.workspaceId.toString() === workspaceId.toString()) {
-      return acc;
+      return sanitizeAccount(acc);
     }
     return null;
   },
@@ -78,9 +91,16 @@ export const emailAccountService = {
 
     // Exchange authorization code with provider
     const tokenData = await provider.exchangeCodeForTokens(code, redirectUri);
+    if (!tokenData || !tokenData.accessToken) {
+      throw new Error('OAuth token exchange returned an invalid or missing access token.');
+    }
+    if (!tokenData.profile || !tokenData.profile.email) {
+      throw new Error('OAuth token exchange failed to retrieve a verified email address.');
+    }
+
     const emailAddress = tokenData.profile.email.toLowerCase().trim();
 
-    // Encrypt sensitive tokens at rest
+    // Encrypt sensitive tokens at rest using AES-256-GCM
     const encryptedAccessToken = encryptToken(tokenData.accessToken);
     const encryptedRefreshToken = tokenData.refreshToken ? encryptToken(tokenData.refreshToken) : '';
 
@@ -94,7 +114,8 @@ export const emailAccountService = {
 
       if (account) {
         account.encryptedAccessToken = encryptedAccessToken;
-        if (encryptedRefreshToken) {
+        // Never overwrite an existing refresh token with null or an empty value
+        if (encryptedRefreshToken && encryptedRefreshToken.trim() !== '') {
           account.encryptedRefreshToken = encryptedRefreshToken;
         }
         account.tokenExpiresAt = tokenData.tokenExpiresAt;
@@ -102,6 +123,10 @@ export const emailAccountService = {
         account.displayName = tokenData.profile.name || account.displayName;
         account.lastSyncedAt = new Date();
         account.scopes = tokenData.scopes;
+        if (tokenData.profile.id) {
+          account.metadata = account.metadata || {};
+          account.metadata.providerUserId = tokenData.profile.id;
+        }
         await account.save();
       } else {
         account = new EmailAccount({
@@ -111,7 +136,7 @@ export const emailAccountService = {
           emailAddress,
           displayName: tokenData.profile.name || '',
           encryptedAccessToken,
-          encryptedRefreshToken,
+          encryptedRefreshToken: encryptedRefreshToken || '',
           tokenExpiresAt: tokenData.tokenExpiresAt,
           scopes: tokenData.scopes,
           connectionStatus: CONNECTION_STATUS.CONNECTED,
@@ -123,9 +148,9 @@ export const emailAccountService = {
         await account.save();
       }
 
-      return account;
+      return sanitizeAccount(account);
     } else {
-      // In-memory mock
+      // In-memory mock for dev mode
       const existing = Array.from(devEmailAccounts.values()).find(
         (a) =>
           a.workspaceId.toString() === workspaceId.toString() &&
@@ -140,9 +165,11 @@ export const emailAccountService = {
         userId,
         provider: providerName,
         emailAddress,
-        displayName: tokenData.profile.name || '',
+        displayName: tokenData.profile.name || existing?.displayName || '',
         encryptedAccessToken,
-        encryptedRefreshToken: encryptedRefreshToken || existing?.encryptedRefreshToken || '',
+        encryptedRefreshToken: (encryptedRefreshToken && encryptedRefreshToken.trim() !== '')
+          ? encryptedRefreshToken
+          : (existing?.encryptedRefreshToken || ''),
         tokenExpiresAt: tokenData.tokenExpiresAt,
         scopes: tokenData.scopes,
         connectionStatus: CONNECTION_STATUS.CONNECTED,
@@ -150,13 +177,107 @@ export const emailAccountService = {
         metadata: {
           dailyQuota: 500,
           sentToday: 0,
+          providerUserId: tokenData.profile.id || '',
         },
         createdAt: existing?.createdAt || new Date(),
         updatedAt: new Date(),
       };
       devEmailAccounts.set(id, account);
-      return account;
+      return sanitizeAccount(account);
     }
+  },
+
+  /**
+   * Restore connected status for stored email accounts that possess a valid refresh token upon backend restart
+   */
+  async restoreConnectedAccounts() {
+    if (mongoose.connection.readyState === 1) {
+      const accounts = await EmailAccount.find({
+        connectionStatus: { $in: [CONNECTION_STATUS.EXPIRED, CONNECTION_STATUS.ERROR, CONNECTION_STATUS.CONNECTED] },
+      }).select('+encryptedAccessToken +encryptedRefreshToken');
+
+      let restoredCount = 0;
+      for (const account of accounts) {
+        if (account.encryptedRefreshToken && account.encryptedRefreshToken.trim() !== '') {
+          account.connectionStatus = CONNECTION_STATUS.CONNECTED;
+          await account.save();
+          restoredCount++;
+        }
+      }
+      return restoredCount;
+    }
+    return 0;
+  },
+
+  /**
+   * Proactively verifies and refreshes an account's OAuth access token before email dispatch.
+   * Automatically encrypts and stores refreshed access token and rotated refresh token (if any).
+   * Never overwrites existing refresh token with empty/null value.
+   *
+   * @param {Object} account - Mongoose document or in-memory account
+   * @returns {Promise<string>} Decrypted valid access token
+   */
+  async ensureValidToken(account) {
+    if (!account) {
+      throw new Error('Email account not provided.');
+    }
+
+    if (account.connectionStatus && account.connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+      throw new Error(`Email account is currently ${account.connectionStatus}. Please reauthorize.`);
+    }
+
+    const provider = emailProviderRegistry.get(account.provider);
+    if (!provider) {
+      throw new Error(`Email provider '${account.provider}' is not supported.`);
+    }
+
+    let accessToken = account.encryptedAccessToken ? decryptToken(account.encryptedAccessToken) : '';
+    const refreshToken = account.encryptedRefreshToken ? decryptToken(account.encryptedRefreshToken) : '';
+
+    const isExpired =
+      !accessToken ||
+      !account.tokenExpiresAt ||
+      new Date() >= new Date(new Date(account.tokenExpiresAt).getTime() - 60000);
+
+    if (isExpired) {
+      if (!refreshToken) {
+        account.connectionStatus = CONNECTION_STATUS.EXPIRED;
+        if (account.save) await account.save();
+        throw new Error('Access token is expired and no refresh token is available. Please reauthorize.');
+      }
+
+      try {
+        const refreshed = await provider.refreshAccessToken(refreshToken);
+        accessToken = refreshed.accessToken;
+        account.encryptedAccessToken = encryptToken(refreshed.accessToken);
+        account.tokenExpiresAt = refreshed.tokenExpiresAt;
+
+        // Requirement 4 & 6: Save rotated refresh token automatically, never overwrite with null or empty value
+        if (refreshed.refreshToken && refreshed.refreshToken.trim() !== '') {
+          account.encryptedRefreshToken = encryptToken(refreshed.refreshToken);
+        }
+
+        account.connectionStatus = CONNECTION_STATUS.CONNECTED;
+        if (account.save) await account.save();
+
+        if (devEmailAccounts.has(account._id?.toString())) {
+          devEmailAccounts.set(account._id.toString(), {
+            ...devEmailAccounts.get(account._id.toString()),
+            ...account,
+            encryptedAccessToken: account.encryptedAccessToken,
+            encryptedRefreshToken: account.encryptedRefreshToken,
+            tokenExpiresAt: account.tokenExpiresAt,
+            connectionStatus: account.connectionStatus,
+          });
+        }
+      } catch (refreshErr) {
+        account.connectionStatus = refreshErr.isRevoked ? CONNECTION_STATUS.REVOKED : CONNECTION_STATUS.ERROR;
+        if (account.save) await account.save();
+        throw new Error(`Failed to refresh mailbox credentials: ${refreshErr.message}`);
+      }
+    }
+
+    return accessToken;
   },
 
   /**
@@ -200,30 +321,9 @@ export const emailAccountService = {
 
     const provider = emailProviderRegistry.get(account.provider);
 
-    // Decrypt tokens
-    let accessToken = decryptToken(account.encryptedAccessToken);
-    let refreshToken = decryptToken(account.encryptedRefreshToken);
-
-    // Check token expiration and refresh if necessary
-    if (account.tokenExpiresAt && new Date() >= new Date(account.tokenExpiresAt)) {
-      if (!refreshToken) {
-        account.connectionStatus = CONNECTION_STATUS.EXPIRED;
-        if (account.save) await account.save();
-        throw new Error('Access token expired and no refresh token is available. Please reauthorize.');
-      }
-
-      try {
-        const refreshed = await provider.refreshAccessToken(refreshToken);
-        accessToken = refreshed.accessToken;
-        account.encryptedAccessToken = encryptToken(refreshed.accessToken);
-        account.tokenExpiresAt = refreshed.tokenExpiresAt;
-        if (account.save) await account.save();
-      } catch (refreshErr) {
-        account.connectionStatus = refreshErr.isRevoked ? CONNECTION_STATUS.REVOKED : CONNECTION_STATUS.ERROR;
-        if (account.save) await account.save();
-        throw new Error(`Failed to refresh mailbox credentials: ${refreshErr.message}`);
-      }
-    }
+    // Automatically refresh expired access tokens before sending
+    const accessToken = await this.ensureValidToken(account);
+    const refreshToken = account.encryptedRefreshToken ? decryptToken(account.encryptedRefreshToken) : undefined;
 
     // Dispatch test email via provider
     const subject = `[MailFlow] Test email from ${account.emailAddress}`;

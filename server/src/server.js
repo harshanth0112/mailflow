@@ -27,6 +27,15 @@ const closeDependencies = async () => {
 
 const startServer = async () => {
   await connectDatabase();
+  try {
+    const { emailAccountService } = await import('./services/emailAccountService.js');
+    const restoredCount = await emailAccountService.restoreConnectedAccounts();
+    if (restoredCount > 0) {
+      logger.info(`Restored ${restoredCount} connected email account(s).`);
+    }
+  } catch (restoreErr) {
+    logger.warn('Failed to restore connected email accounts on startup', { error: restoreErr.message });
+  }
   if (env.QUEUE_FEATURES_ENABLED) {
     await connectRedis();
   }
