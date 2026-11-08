@@ -232,7 +232,7 @@ export const CampaignComposerModal = ({
 
   const handleSendNow = async () => {
     if (!formData.senderEmailAccountId) {
-      setError('Please select a sender email account before launching');
+      setError('Please select a sender email account before launching.');
       setStep(1);
       return;
     }
@@ -257,7 +257,9 @@ export const CampaignComposerModal = ({
       } else {
         saved = await onSave(payload, campaign._id);
       }
-      await onSend(saved._id || campaign._id);
+      await onSend(saved._id || campaign._id, {
+        senderEmailAccountId: formData.senderEmailAccountId,
+      });
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to trigger campaign dispatch');

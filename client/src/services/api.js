@@ -170,7 +170,7 @@ export const deleteCampaign = (id) => api.delete(`/campaigns/${id}`);
 export const duplicateCampaign = (id) => api.post(`/campaigns/${id}/duplicate`);
 export const previewAudience = (data) => api.post('/campaigns/preview-audience', data);
 export const sendCampaignTestEmail = (id, data) => api.post(`/campaigns/${id}/test-email`, data);
-export const sendCampaign = (id, headers = {}) => api.post(`/campaigns/${id}/send`, {}, { headers });
+export const sendCampaign = (id, data = {}, headers = {}) => api.post(`/campaigns/${id}/send`, data, { headers });
 export const scheduleCampaign = (id, data) => api.post(`/campaigns/${id}/schedule`, data);
 export const rescheduleCampaign = (id, data) => api.post(`/campaigns/${id}/reschedule`, data);
 export const cancelCampaign = (id) => api.post(`/campaigns/${id}/cancel`);

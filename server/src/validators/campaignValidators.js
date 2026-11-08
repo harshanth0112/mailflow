@@ -59,6 +59,10 @@ export const campaignTestEmailSchema = z.object({
   senderEmailAccountId: z.string().optional().nullable(),
 });
 
+export const campaignSendSchema = z.object({
+  senderEmailAccountId: z.string().optional().nullable(),
+});
+
 export const campaignScheduleSchema = z.object({
   scheduledAt: z.string().datetime({ offset: true }),
   timezone: z.string().min(1).max(100).optional().default('UTC'),

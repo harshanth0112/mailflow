@@ -455,7 +455,7 @@ export const campaignService = {
    * 3. Creates immutable CampaignRecipient records.
    * 4. Prepares execution compatible with Phase 9 background job queues.
    */
-  async triggerCampaignSend({ workspaceId, campaignId, idempotencyKey = null }) {
+  async triggerCampaignSend({ workspaceId, campaignId, idempotencyKey = null, senderEmailAccountId = null }) {
     await requireProductionQueueWorker();
     let campaign = null;
 
@@ -483,27 +483,43 @@ export const campaignService = {
     }
 
     // Sender validation
-    if (!campaign.senderEmailAccountId) {
-      throw new Error('Cannot send campaign without a valid connected sender email account.');
+    const effectiveSenderId =
+      senderEmailAccountId ||
+      campaign.senderEmailAccountId?._id ||
+      campaign.senderEmailAccountId;
+
+    if (!effectiveSenderId) {
+      throw new Error('Please select a sender email account before launching.');
+    }
+
+    // Load sender account with workspace verification
+    let senderAccount = null;
+    if (mongoose.connection.readyState === 1) {
+      senderAccount = await EmailAccount.findOne({
+        _id: effectiveSenderId,
+        workspaceId,
+      }).select('+encryptedAccessToken +encryptedRefreshToken');
+    } else {
+      const { devEmailAccounts } = await import('./emailAccountService.js');
+      senderAccount = devEmailAccounts.get(effectiveSenderId.toString());
+      if (senderAccount && senderAccount.workspaceId.toString() !== workspaceId.toString()) {
+        senderAccount = null;
+      }
+    }
+
+    if (!senderAccount) {
+      throw new Error('Configured sender mailbox account was not found or access denied.');
+    }
+
+    if (senderAccount.connectionStatus && senderAccount.connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+      throw new Error(`Sender email account is currently ${senderAccount.connectionStatus}. Please reauthorize.`);
     }
 
     if (env.CAMPAIGN_EMAIL_PROVIDER === 'sendliberty') {
-      const senderAccountId = campaign.senderEmailAccountId._id || campaign.senderEmailAccountId;
-      let senderAccount;
-      if (mongoose.connection.readyState === 1) {
-        senderAccount = await EmailAccount.findOne({
-          _id: senderAccountId,
-          workspaceId,
-        }).select('provider emailAddress');
-      } else {
-        const { devEmailAccounts } = await import('./emailAccountService.js');
-        senderAccount = devEmailAccounts.get(senderAccountId.toString());
-      }
-      if (!senderAccount) {
-        throw new Error('Configured sender mailbox account was not found or access denied.');
-      }
       getCampaignEmailProvider(senderAccount);
     }
+
+    campaign.senderEmailAccountId = effectiveSenderId;
 
     // Recheck recipient eligibility immediately before execution!
     const eligibleContacts = await this.resolveEligibleRecipients(

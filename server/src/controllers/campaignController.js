@@ -4,6 +4,7 @@ import {
   campaignUpdateSchema,
   campaignQuerySchema,
   campaignTestEmailSchema,
+  campaignSendSchema,
   campaignScheduleSchema,
   recipientConfigSchema,
 } from '../validators/campaignValidators.js';
@@ -191,11 +192,17 @@ export const campaignController = {
    */
   async sendCampaign(req, res) {
     try {
+      const validation = campaignSendSchema.safeParse(req.body || {});
+      if (!validation.success) {
+        return sendError(res, 400, 'Validation failed', validation.error.flatten().fieldErrors);
+      }
+
       const idempotencyKey = req.headers['x-idempotency-key'] || null;
       const result = await campaignService.triggerCampaignSend({
         workspaceId: req.workspace._id,
         campaignId: req.params.id,
         idempotencyKey,
+        senderEmailAccountId: validation.data.senderEmailAccountId,
       });
 
       return sendSuccess(res, 200, 'Campaign queued for dispatch', result);

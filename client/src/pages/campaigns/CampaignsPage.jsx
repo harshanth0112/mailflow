@@ -120,13 +120,14 @@ export const CampaignsPage = () => {
     }
   };
 
-  const handleSendCampaign = async (campaignId) => {
+  const handleSendCampaign = async (campaignId, payload = {}) => {
     try {
-      await sendCampaign(campaignId);
+      await sendCampaign(campaignId, payload);
       setSuccessMessage('Campaign queued for delivery!');
       fetchCampaigns();
     } catch (err) {
       setError(err.message || 'Failed to trigger campaign send');
+      throw err;
     }
   };
 
