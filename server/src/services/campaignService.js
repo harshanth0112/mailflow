@@ -16,8 +16,9 @@ import { escapeRegex } from '../utils/regexUtils.js';
 
 const requireProductionQueueWorker = async () => {
   if (env.NODE_ENV !== 'production') return;
+  // When QUEUE_FEATURES_ENABLED is false, in-process async dispatch is used
   if (!env.QUEUE_FEATURES_ENABLED) {
-    throw new ApiError(503, 'Campaign sending and scheduling are disabled until a worker is deployed.');
+    return;
   }
   if (!(await isQueueWorkerReady())) {
     throw new ApiError(503, 'Campaign sending and scheduling are unavailable because the worker is not ready.');
@@ -562,28 +563,39 @@ export const campaignService = {
       await CampaignRecipient.deleteMany({ campaignId: campaign._id });
       await CampaignRecipient.insertMany(recipientRecords, { ordered: false });
 
-      // Enqueue BullMQ dispatch job if Redis is active
-      try {
-        const dispatchQ = getQueue(QUEUE_NAMES.CAMPAIGN_DISPATCH);
-        await dispatchQ.add(
-          'dispatch-campaign',
-          { campaignId: campaign._id.toString(), workspaceId: workspaceId.toString() },
-          { jobId: `campaign-dispatch-${campaign._id.toString()}-${assignedKey}` }
-        );
-      } catch (redisErr) {
-        console.warn(`Campaign dispatch could not be confirmed (${redisErr.name}). Rolling back queued state.`);
-        campaign.status = CAMPAIGN_STATUS.DRAFT;
-        campaign.startedAt = null;
-        campaign.sendIdempotencyKey = null;
-        await campaign.save();
-        await CampaignRecipient.deleteMany({ campaignId: campaign._id });
-
-        if (env.NODE_ENV === 'production') {
-          throw new ApiError(
-            503,
-            'Campaign dispatch could not be confirmed. Check campaign status before retrying.'
+      if (env.QUEUE_FEATURES_ENABLED) {
+        // Enqueue BullMQ dispatch job if Redis is active
+        try {
+          const dispatchQ = getQueue(QUEUE_NAMES.CAMPAIGN_DISPATCH);
+          await dispatchQ.add(
+            'dispatch-campaign',
+            { campaignId: campaign._id.toString(), workspaceId: workspaceId.toString() },
+            { jobId: `campaign-dispatch-${campaign._id.toString()}-${assignedKey}` }
           );
+        } catch (redisErr) {
+          console.warn(`Campaign dispatch could not be confirmed (${redisErr.name}). Rolling back queued state.`);
+          campaign.status = CAMPAIGN_STATUS.DRAFT;
+          campaign.startedAt = null;
+          campaign.sendIdempotencyKey = null;
+          await campaign.save();
+          await CampaignRecipient.deleteMany({ campaignId: campaign._id });
+
+          if (env.NODE_ENV === 'production') {
+            throw new ApiError(
+              503,
+              'Campaign dispatch could not be confirmed. Check campaign status before retrying.'
+            );
+          }
         }
+      } else {
+        // Direct in-process asynchronous dispatch for standalone/serverless hosting
+        import('../workers/campaignWorker.js').then(({ processCampaignDispatch }) => {
+          processCampaignDispatch({
+            data: { campaignId: campaign._id.toString(), workspaceId: workspaceId.toString() },
+          }).catch((err) => {
+            console.error('In-process campaign dispatch error:', err);
+          });
+        });
       }
     } else {
       devCampaigns.set(campaignId, campaign);
