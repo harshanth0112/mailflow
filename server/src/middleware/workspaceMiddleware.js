@@ -38,8 +38,10 @@ export const requireWorkspace = async (req, res, next) => {
         if (membership && membership.workspaceId) {
           workspace = membership.workspaceId;
         }
-      } else {
-        // Resolve default active workspace for this user
+      }
+
+      // If explicit workspace ID was not found or invalid for this user, fall back to their default workspace
+      if (!membership || !workspace) {
         membership = await Membership.findOne({
           userId: req.user._id,
           invitationStatus: INVITATION_STATUS.ACCEPTED,
@@ -49,6 +51,23 @@ export const requireWorkspace = async (req, res, next) => {
 
         if (membership && membership.workspaceId) {
           workspace = membership.workspaceId;
+        }
+      }
+
+      // If user still has no workspace, automatically provision their default workspace
+      if (!membership || !workspace) {
+        try {
+          const { createDefaultWorkspaceForUser } = await import('../services/workspaceService.js');
+          const newWs = await createDefaultWorkspaceForUser(req.user);
+          if (newWs) {
+            membership = await Membership.findOne({
+              workspaceId: newWs._id,
+              userId: req.user._id,
+            }).populate('workspaceId');
+            workspace = newWs;
+          }
+        } catch (wsErr) {
+          // Continue to error check below if provisioning fails
         }
       }
     } else {
@@ -61,12 +80,28 @@ export const requireWorkspace = async (req, res, next) => {
 
       if (explicitWorkspaceId) {
         membership = userMemberships.find((m) => m.workspaceId === explicitWorkspaceId);
-      } else {
+      }
+      if (!membership) {
         membership = userMemberships[0];
       }
 
       if (membership) {
         workspace = devWorkspaces.get(membership.workspaceId);
+      }
+
+      if (!membership || !workspace) {
+        try {
+          const { createDefaultWorkspaceForUser } = await import('../services/workspaceService.js');
+          const newWs = await createDefaultWorkspaceForUser(req.user);
+          if (newWs) {
+            membership = Array.from(devMemberships.values()).find(
+              (m) => m.userId === userId && m.workspaceId === (newWs._id || newWs.id)
+            );
+            workspace = newWs;
+          }
+        } catch (wsErr) {
+          // Continue to error check below
+        }
       }
     }
 

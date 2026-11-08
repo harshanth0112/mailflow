@@ -34,6 +34,7 @@ export const WorkspaceProvider = ({ children }) => {
       }
     } catch (err) {
       console.error('Error fetching workspace:', err);
+      localStorage.removeItem('mailflow_workspace_id');
       setError(err.message || 'Failed to load workspace');
     } finally {
       setIsLoading(false);

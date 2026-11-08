@@ -45,6 +45,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+    localStorage.removeItem('mailflow_workspace_id');
     const res = await apiLogin({ email, password });
     const { user: userData, accessToken } = res.data;
     
@@ -56,6 +57,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const setAuthSession = async (accessToken) => {
+    localStorage.removeItem('mailflow_workspace_id');
     setToken(accessToken);
     localStorage.setItem('mailflow_token', accessToken);
     try {
@@ -86,6 +88,7 @@ export const AuthProvider = ({ children }) => {
       setToken(null);
       localStorage.removeItem('mailflow_user');
       localStorage.removeItem('mailflow_token');
+      localStorage.removeItem('mailflow_workspace_id');
     }
   };
 
