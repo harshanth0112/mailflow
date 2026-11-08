@@ -6,7 +6,6 @@ import {
 } from '../validators/emailAccountValidators.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 import { env } from '../config/env.js';
-
 export const emailAccountController = {
   /**
    * GET /api/v1/email-accounts
@@ -70,6 +69,41 @@ export const emailAccountController = {
       return sendSuccess(res, 200, 'OAuth authorization URL generated', { url, state });
     } catch (error) {
       return sendError(res, 400, error.message || 'Failed to initiate OAuth flow');
+    }
+  },
+
+  /**
+   * GET /api/v1/email-accounts/oauth/google/callback
+   * Browser redirect target from Google after sender mailbox authorization.
+   * Exchanges the code, saves the EmailAccount, and redirects to the frontend settings page.
+   * This route is PUBLIC (no auth middleware) — Google browser-redirects here directly.
+   */
+  async handleGoogleSenderCallback(req, res) {
+    const clientUrl = env.CLIENT_URL || 'http://localhost:5173';
+    const successRedirect = `${clientUrl}/workspace/email-accounts?connected=1`;
+    const errorRedirect = (msg) =>
+      `${clientUrl}/workspace/email-accounts?error=${encodeURIComponent(msg)}`;
+
+    try {
+      const { code, state, error } = req.query;
+
+      if (error) {
+        return res.redirect(errorRedirect(error));
+      }
+
+      if (!code || !state) {
+        return res.redirect(errorRedirect('Missing authorization code or state parameter.'));
+      }
+
+      await emailAccountService.handleOAuthCallback({
+        code,
+        state,
+        redirectUri: env.GMAIL_SENDER_CALLBACK_URL,
+      });
+
+      return res.redirect(successRedirect);
+    } catch (err) {
+      return res.redirect(errorRedirect(err.message || 'Failed to connect email account.'));
     }
   },
 

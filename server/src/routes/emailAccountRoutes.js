@@ -10,6 +10,13 @@ import { PERMISSIONS } from '../config/roles.js';
 
 const router = express.Router();
 
+// ── Public browser-redirect callback (no auth required — Google redirects here) ──
+// Must be registered BEFORE the requireAuth middleware.
+router.get(
+  '/oauth/google/callback',
+  emailAccountController.handleGoogleSenderCallback
+);
+
 router.use(requireAuth);
 router.use(requireWorkspace);
 

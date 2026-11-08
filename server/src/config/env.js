@@ -74,6 +74,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional().default(''),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
   GOOGLE_CALLBACK_URL: z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/google/callback'),
+  GMAIL_SENDER_CALLBACK_URL: z.string().url().optional().default('http://localhost:5000/api/v1/email-accounts/oauth/google/callback'),
   GITHUB_CLIENT_ID: z.string().optional().default(''),
   GITHUB_CLIENT_SECRET: z.string().optional().default(''),
   GITHUB_CALLBACK_URL: z.string().url().optional().default('http://localhost:5000/api/v1/auth/oauth/github/callback'),

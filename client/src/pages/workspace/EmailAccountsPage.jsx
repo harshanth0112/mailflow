@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { useSearchParams } from 'react-router-dom';
 import {
   getEmailProviders,
   getConnectedEmailAccounts,
@@ -30,6 +31,7 @@ import {
 export const EmailAccountsPage = () => {
   const { workspace, isAdmin, isSuperAdmin } = useWorkspace();
   const canManage = isAdmin || isSuperAdmin;
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [providers, setProviders] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -68,6 +70,20 @@ export const EmailAccountsPage = () => {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Handle redirect params from server-side OAuth callback
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    const oauthError = searchParams.get('error');
+    if (connected === '1') {
+      setSuccessMessage('Email account connected successfully!');
+      loadData();
+      setSearchParams({}, { replace: true });
+    } else if (oauthError) {
+      setError(decodeURIComponent(oauthError));
+      setSearchParams({}, { replace: true });
+    }
   }, []);
 
   const handleConnectProvider = async (providerId) => {

@@ -3,6 +3,7 @@ import { EmailAccount, CONNECTION_STATUS, EMAIL_PROVIDERS } from '../models/Emai
 import { emailProviderRegistry } from './email/EmailProviderRegistry.js';
 import { encryptToken, decryptToken } from '../utils/cryptoUtils.js';
 import { generateRandomToken } from '../utils/tokenUtils.js';
+import { env } from '../config/env.js';
 
 // In-memory fallback map for dev mode
 export const devEmailAccounts = new Map();
@@ -56,6 +57,13 @@ export const emailAccountService = {
   initiateOAuth({ workspaceId, userId, providerName = 'gmail', redirectUri }) {
     const provider = emailProviderRegistry.get(providerName);
     
+    // Use the dedicated sender OAuth callback URL unless caller provides an explicit one
+    const effectiveRedirectUri =
+      redirectUri ||
+      (providerName === 'gmail'
+        ? env.GMAIL_SENDER_CALLBACK_URL
+        : env.MICROSOFT_CALLBACK_URL);
+
     // Generate cryptographically secure state
     const state = generateRandomToken(24);
     // State expires in 15 minutes
@@ -63,10 +71,11 @@ export const emailAccountService = {
       workspaceId: workspaceId.toString(),
       userId: userId.toString(),
       provider: providerName,
+      redirectUri: effectiveRedirectUri,
       expiresAt: Date.now() + 15 * 60 * 1000,
     });
 
-    const url = provider.getAuthorizationUrl({ state, redirectUri });
+    const url = provider.getAuthorizationUrl({ state, redirectUri: effectiveRedirectUri });
     return { url, state };
   },
 
@@ -90,7 +99,7 @@ export const emailAccountService = {
     const provider = emailProviderRegistry.get(providerName);
 
     // Exchange authorization code with provider
-    const tokenData = await provider.exchangeCodeForTokens(code, redirectUri);
+    const tokenData = await provider.exchangeCodeForTokens(code, redirectUri || storedState.redirectUri);
     if (!tokenData || !tokenData.accessToken) {
       throw new Error('OAuth token exchange returned an invalid or missing access token.');
     }
