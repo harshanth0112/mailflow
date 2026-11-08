@@ -116,6 +116,29 @@ export const requireWorkspacePermission = (permission) => {
 };
 
 /**
+ * Middleware ensuring current user's workspace role has at least ONE of the specified permissions
+ * @param {string[]} permissions
+ */
+export const requireAnyWorkspacePermission = (...permissions) => {
+  return (req, res, next) => {
+    if (!req.workspaceRole) {
+      return sendError(res, 403, 'Workspace role not determined');
+    }
+
+    const permitted = permissions.some((perm) => hasPermission(req.workspaceRole, perm));
+    if (!permitted) {
+      return sendError(
+        res,
+        403,
+        `Permission denied: requires one of the following permissions: ${permissions.join(', ')}`
+      );
+    }
+
+    next();
+  };
+};
+
+/**
  * Middleware requiring specific workspace roles
  * @param  {...string} allowedRoles 
  */

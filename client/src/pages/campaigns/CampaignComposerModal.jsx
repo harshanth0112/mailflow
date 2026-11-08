@@ -24,28 +24,33 @@ import {
 } from 'lucide-react';
 import { previewAudience, sendCampaignTestEmail, uploadAttachments } from '../../services/api';
 
-const createInitialFormData = (campaign, senderAccounts) => ({
-  name: campaign?.name || '',
-  subject: campaign?.subject || '',
-  previewText: campaign?.previewText || '',
-  senderEmailAccountId:
+const createInitialFormData = (campaign, senderAccounts = []) => {
+  const activeSenders = senderAccounts.filter((acc) => !acc.connectionStatus || acc.connectionStatus === 'connected');
+  const defaultSenderId =
     campaign?.senderEmailAccountId?._id ||
     campaign?.senderEmailAccountId ||
-    (senderAccounts[0]?._id || ''),
-  senderName: campaign?.senderName || '',
-  replyTo: campaign?.replyTo || '',
-  recipientType: campaign?.recipientConfiguration?.type || 'all_eligible',
-  groupIds: campaign?.recipientConfiguration?.groupIds || [],
-  tags: campaign?.recipientConfiguration?.tags ? campaign.recipientConfiguration.tags.join(', ') : '',
-  attachments: campaign?.attachments || [],
-  htmlContent:
-    campaign?.htmlContent ||
-    '<div style="font-family: sans-serif; line-height: 1.6; color: #1e293b;">\n  <h2>Hello {{firstName}},</h2>\n  <p>We are thrilled to share our latest product updates with {{company}}!</p>\n  <p>Let us know if you have any questions.</p>\n  <p>Best regards,<br/>The MailFlow Team</p>\n</div>',
-  textContent:
-    campaign?.textContent ||
-    'Hello {{firstName}},\n\nWe are thrilled to share our latest product updates with {{company}}!\n\nBest regards,\nThe MailFlow Team',
-  templateId: campaign?.templateId || '',
-});
+    (activeSenders[0]?._id || senderAccounts[0]?._id || '');
+
+  return {
+    name: campaign?.name || '',
+    subject: campaign?.subject || '',
+    previewText: campaign?.previewText || '',
+    senderEmailAccountId: defaultSenderId,
+    senderName: campaign?.senderName || '',
+    replyTo: campaign?.replyTo || '',
+    recipientType: campaign?.recipientConfiguration?.type || 'all_eligible',
+    groupIds: campaign?.recipientConfiguration?.groupIds || [],
+    tags: campaign?.recipientConfiguration?.tags ? campaign.recipientConfiguration.tags.join(', ') : '',
+    attachments: campaign?.attachments || [],
+    htmlContent:
+      campaign?.htmlContent ||
+      '<div style="font-family: sans-serif; line-height: 1.6; color: #1e293b;">\n  <h2>Hello {{firstName}},</h2>\n  <p>We are thrilled to share our latest product updates with {{company}}!</p>\n  <p>Let us know if you have any questions.</p>\n  <p>Best regards,<br/>The MailFlow Team</p>\n</div>',
+    textContent:
+      campaign?.textContent ||
+      'Hello {{firstName}},\n\nWe are thrilled to share our latest product updates with {{company}}!\n\nBest regards,\nThe MailFlow Team',
+    templateId: campaign?.templateId || '',
+  };
+};
 
 export const CampaignComposerModal = ({
   isOpen,
@@ -149,7 +154,7 @@ export const CampaignComposerModal = ({
     setTestEmailRecipient('');
     setError('');
     setSuccess('');
-  }, [isOpen, campaign?._id]);
+  }, [isOpen, campaign?._id, senderAccounts]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -301,7 +306,7 @@ export const CampaignComposerModal = ({
       return;
     }
     if (!formData.senderEmailAccountId) {
-      setError('Please select a sender email account to dispatch the test email.');
+      setError('Please select a sender email account to dispatch the test email. Connect one in Workspace > Email Accounts if none are available.');
       return;
     }
 
@@ -309,12 +314,15 @@ export const CampaignComposerModal = ({
     setError('');
     setSuccess('');
     try {
-      // First save draft so campaign has latest subject/content
+      // First save draft so campaign has latest subject/content and sender account assigned
       const payload = buildPayload();
       const saved = await onSave(payload, campaign?._id);
       const campId = saved._id || campaign?._id;
 
-      await sendCampaignTestEmail(campId, { recipientEmail: testEmailRecipient.trim() });
+      await sendCampaignTestEmail(campId, {
+        recipientEmail: testEmailRecipient.trim(),
+        senderEmailAccountId: formData.senderEmailAccountId,
+      });
       setSuccess(`Test email dispatched successfully to ${testEmailRecipient}!`);
     } catch (err) {
       setError(err.message || 'Failed to dispatch test email');
@@ -774,25 +782,59 @@ export const CampaignComposerModal = ({
                 <p className="text-xs font-semibold text-white flex items-center gap-1.5">
                   <Send className="w-3.5 h-3.5 text-indigo-400" /> Send a Single Test Email Before Launch
                 </p>
-                <form onSubmit={handleSendTest} className="flex gap-2">
-                  <Input
-                    type="email"
-                    placeholder="Enter your email to receive test message..."
-                    value={testEmailRecipient}
-                    onChange={(e) => setTestEmailRecipient(e.target.value)}
-                    required
-                    className="h-9 text-xs"
-                  />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    isLoading={sendingTest}
-                    className="h-9 text-xs flex-shrink-0 border-slate-700"
-                  >
-                    Send Test Email
-                  </Button>
-                </form>
+
+                {senderAccounts.length === 0 ? (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium">No connected email account</p>
+                      <p className="text-slate-400 mt-0.5">
+                        You need at least one connected mailbox in this workspace to send test emails. Connect an account in Workspace &rarr; Email Accounts.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-400 shrink-0">Send from:</label>
+                      <select
+                        name="senderEmailAccountId"
+                        value={formData.senderEmailAccountId}
+                        onChange={handleChange}
+                        className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 flex-1 max-w-xs"
+                      >
+                        <option value="">-- Select Mailbox --</option>
+                        {senderAccounts.map((acc) => (
+                          <option key={acc._id} value={acc._id}>
+                            {acc.emailAddress} ({acc.provider.toUpperCase()})
+                            {acc.connectionStatus && acc.connectionStatus !== 'connected' ? ` [${acc.connectionStatus}]` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <form onSubmit={handleSendTest} className="flex gap-2">
+                      <Input
+                        type="email"
+                        placeholder="Enter your email to receive test message..."
+                        value={testEmailRecipient}
+                        onChange={(e) => setTestEmailRecipient(e.target.value)}
+                        required
+                        className="h-9 text-xs"
+                      />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        size="sm"
+                        isLoading={sendingTest}
+                        disabled={!formData.senderEmailAccountId}
+                        className="h-9 text-xs flex-shrink-0 border-slate-700"
+                      >
+                        Send Test Email
+                      </Button>
+                    </form>
+                  </div>
+                )}
               </div>
 
               {/* Schedule */}

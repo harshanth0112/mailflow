@@ -343,32 +343,70 @@ export const campaignService = {
   /**
    * Dispatch a single test email for a campaign
    */
-  async sendTestEmail({ workspaceId, campaignId, recipientEmail }) {
+  async sendTestEmail({ workspaceId, campaignId, recipientEmail, senderEmailAccountId = null }) {
     const campaign = await this.getCampaignById({ workspaceId, campaignId });
     if (!campaign) {
       throw new Error('Campaign not found.');
     }
 
-    if (!campaign.senderEmailAccountId) {
+    const effectiveSenderId =
+      senderEmailAccountId ||
+      campaign.senderEmailAccountId?._id ||
+      campaign.senderEmailAccountId;
+
+    if (!effectiveSenderId) {
       throw new Error('Please select a sender email account before dispatching a test email.');
     }
 
-    // Load sender account
+    // Load sender account with workspace verification
     let senderAccount = null;
-    const senderAccountId = campaign.senderEmailAccountId._id || campaign.senderEmailAccountId;
 
     if (mongoose.connection.readyState === 1) {
       senderAccount = await EmailAccount.findOne({
-        _id: senderAccountId,
+        _id: effectiveSenderId,
         workspaceId,
       }).select('+encryptedAccessToken +encryptedRefreshToken');
     } else {
       const { devEmailAccounts } = await import('./emailAccountService.js');
-      senderAccount = devEmailAccounts.get(senderAccountId.toString());
+      senderAccount = devEmailAccounts.get(effectiveSenderId.toString());
+      if (senderAccount && senderAccount.workspaceId.toString() !== workspaceId.toString()) {
+        senderAccount = null;
+      }
     }
 
     if (!senderAccount) {
       throw new Error('Configured sender mailbox account was not found or access denied.');
+    }
+
+    if (senderAccount.connectionStatus && senderAccount.connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+      throw new Error(`Sender email account is currently ${senderAccount.connectionStatus}. Please reauthorize.`);
+    }
+
+    const provider = getCampaignEmailProvider(senderAccount);
+    const isSendliberty = provider.name === 'sendliberty';
+
+    let accessToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedAccessToken);
+    let refreshToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedRefreshToken);
+
+    // Refresh token proactively if expired
+    if (!isSendliberty && senderAccount.tokenExpiresAt && new Date() >= new Date(senderAccount.tokenExpiresAt)) {
+      if (!refreshToken) {
+        senderAccount.connectionStatus = CONNECTION_STATUS.EXPIRED;
+        if (senderAccount.save) await senderAccount.save();
+        throw new Error('Sender access token expired and no refresh token is available. Please reauthorize.');
+      }
+
+      try {
+        const refreshed = await provider.refreshAccessToken(refreshToken);
+        accessToken = refreshed.accessToken;
+        senderAccount.encryptedAccessToken = (await import('../utils/cryptoUtils.js')).encryptToken(refreshed.accessToken);
+        senderAccount.tokenExpiresAt = refreshed.tokenExpiresAt;
+        if (senderAccount.save) await senderAccount.save();
+      } catch (refreshErr) {
+        senderAccount.connectionStatus = refreshErr.isRevoked ? CONNECTION_STATUS.REVOKED : CONNECTION_STATUS.ERROR;
+        if (senderAccount.save) await senderAccount.save();
+        throw new Error(`Failed to refresh mailbox credentials: ${refreshErr.message}`);
+      }
     }
 
     // Mock contact for placeholder replacement in preview
@@ -396,11 +434,6 @@ export const campaignService = {
       contact: sampleContact,
       isHtml: false,
     });
-
-    const provider = getCampaignEmailProvider(senderAccount);
-    const isSendliberty = provider.name === 'sendliberty';
-    const accessToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedAccessToken);
-    const refreshToken = isSendliberty ? undefined : decryptToken(senderAccount.encryptedRefreshToken);
 
     const result = await provider.sendEmail({
       from: senderAccount.emailAddress,

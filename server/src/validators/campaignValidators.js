@@ -56,6 +56,7 @@ export const campaignTestEmailSchema = z.object({
     .string({ error: (issue) => issue.input === undefined ? 'Recipient email is required' : undefined })
     .email('Valid recipient email address is required')
     .transform((val) => val.trim().toLowerCase()),
+  senderEmailAccountId: z.string().optional().nullable(),
 });
 
 export const campaignScheduleSchema = z.object({

@@ -176,6 +176,7 @@ export const campaignController = {
         workspaceId: req.workspace._id,
         campaignId: req.params.id,
         recipientEmail: validation.data.recipientEmail,
+        senderEmailAccountId: validation.data.senderEmailAccountId,
       });
 
       return sendSuccess(res, 200, 'Test email dispatched successfully', result);

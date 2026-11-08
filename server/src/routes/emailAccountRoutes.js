@@ -1,7 +1,11 @@
 import express from 'express';
 import { emailAccountController } from '../controllers/emailAccountController.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
-import { requireWorkspace, requireWorkspacePermission } from '../middleware/workspaceMiddleware.js';
+import {
+  requireWorkspace,
+  requireWorkspacePermission,
+  requireAnyWorkspacePermission,
+} from '../middleware/workspaceMiddleware.js';
 import { PERMISSIONS } from '../config/roles.js';
 
 const router = express.Router();
@@ -12,14 +16,14 @@ router.use(requireWorkspace);
 // List supported providers and status
 router.get(
   '/providers',
-  requireWorkspacePermission(PERMISSIONS.SETTINGS_MANAGE),
+  requireAnyWorkspacePermission(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CAMPAIGNS_READ),
   emailAccountController.getProviders
 );
 
-// List connected accounts
+// List connected accounts (accessible to admins or campaign managers to select senders)
 router.get(
   '/',
-  requireWorkspacePermission(PERMISSIONS.SETTINGS_MANAGE),
+  requireAnyWorkspacePermission(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CAMPAIGNS_READ),
   emailAccountController.listAccounts
 );
 
