@@ -44,10 +44,22 @@ export const processCampaignDispatch = async (job) => {
   await campaign.save();
 
   // Load Sender Email Account & decrypt tokens
-  const senderAccount = await EmailAccount.findOne({
-    _id: campaign.senderEmailAccountId,
-    workspaceId,
-  }).select('+encryptedAccessToken +encryptedRefreshToken');
+  let senderAccount = null;
+  if (campaign.senderEmailAccountId) {
+    senderAccount = await EmailAccount.findOne({
+      _id: campaign.senderEmailAccountId,
+      workspaceId,
+    }).select('+encryptedAccessToken +encryptedRefreshToken');
+  }
+
+  if (!senderAccount && env.CAMPAIGN_EMAIL_PROVIDER === 'sendliberty' && env.SENDLIBERTY_FROM_EMAIL) {
+    senderAccount = {
+      _id: null,
+      provider: 'gmail',
+      emailAddress: env.SENDLIBERTY_FROM_EMAIL,
+      connectionStatus: CONNECTION_STATUS.CONNECTED,
+    };
+  }
 
   if (!senderAccount) {
     campaign.status = CAMPAIGN_STATUS.FAILED;

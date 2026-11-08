@@ -355,24 +355,37 @@ export const campaignService = {
       campaign.senderEmailAccountId?._id ||
       campaign.senderEmailAccountId;
 
-    if (!effectiveSenderId) {
+    const isSendlibertyProvider = env.CAMPAIGN_EMAIL_PROVIDER === 'sendliberty';
+
+    if (!effectiveSenderId && (!isSendlibertyProvider || !env.SENDLIBERTY_FROM_EMAIL)) {
       throw new Error('Please select a sender email account before dispatching a test email.');
     }
 
     // Load sender account with workspace verification
     let senderAccount = null;
 
-    if (mongoose.connection.readyState === 1) {
-      senderAccount = await EmailAccount.findOne({
-        _id: effectiveSenderId,
-        workspaceId,
-      }).select('+encryptedAccessToken +encryptedRefreshToken');
-    } else {
-      const { devEmailAccounts } = await import('./emailAccountService.js');
-      senderAccount = devEmailAccounts.get(effectiveSenderId.toString());
-      if (senderAccount && senderAccount.workspaceId.toString() !== workspaceId.toString()) {
-        senderAccount = null;
+    if (effectiveSenderId) {
+      if (mongoose.connection.readyState === 1) {
+        senderAccount = await EmailAccount.findOne({
+          _id: effectiveSenderId,
+          workspaceId,
+        }).select('+encryptedAccessToken +encryptedRefreshToken');
+      } else {
+        const { devEmailAccounts } = await import('./emailAccountService.js');
+        senderAccount = devEmailAccounts.get(effectiveSenderId.toString());
+        if (senderAccount && senderAccount.workspaceId.toString() !== workspaceId.toString()) {
+          senderAccount = null;
+        }
       }
+    }
+
+    if (!senderAccount && isSendlibertyProvider && env.SENDLIBERTY_FROM_EMAIL) {
+      senderAccount = {
+        _id: null,
+        provider: 'gmail',
+        emailAddress: env.SENDLIBERTY_FROM_EMAIL,
+        connectionStatus: CONNECTION_STATUS.CONNECTED,
+      };
     }
 
     if (!senderAccount) {
@@ -469,23 +482,36 @@ export const campaignService = {
       campaign.senderEmailAccountId?._id ||
       campaign.senderEmailAccountId;
 
-    if (!effectiveSenderId) {
+    const isSendlibertyProvider = env.CAMPAIGN_EMAIL_PROVIDER === 'sendliberty';
+
+    if (!effectiveSenderId && (!isSendlibertyProvider || !env.SENDLIBERTY_FROM_EMAIL)) {
       throw new Error('Please select a sender email account before launching.');
     }
 
     // Load sender account with workspace verification
     let senderAccount = null;
-    if (mongoose.connection.readyState === 1) {
-      senderAccount = await EmailAccount.findOne({
-        _id: effectiveSenderId,
-        workspaceId,
-      }).select('+encryptedAccessToken +encryptedRefreshToken');
-    } else {
-      const { devEmailAccounts } = await import('./emailAccountService.js');
-      senderAccount = devEmailAccounts.get(effectiveSenderId.toString());
-      if (senderAccount && senderAccount.workspaceId.toString() !== workspaceId.toString()) {
-        senderAccount = null;
+    if (effectiveSenderId) {
+      if (mongoose.connection.readyState === 1) {
+        senderAccount = await EmailAccount.findOne({
+          _id: effectiveSenderId,
+          workspaceId,
+        }).select('+encryptedAccessToken +encryptedRefreshToken');
+      } else {
+        const { devEmailAccounts } = await import('./emailAccountService.js');
+        senderAccount = devEmailAccounts.get(effectiveSenderId.toString());
+        if (senderAccount && senderAccount.workspaceId.toString() !== workspaceId.toString()) {
+          senderAccount = null;
+        }
       }
+    }
+
+    if (!senderAccount && isSendlibertyProvider && env.SENDLIBERTY_FROM_EMAIL) {
+      senderAccount = {
+        _id: null,
+        provider: 'gmail',
+        emailAddress: env.SENDLIBERTY_FROM_EMAIL,
+        connectionStatus: CONNECTION_STATUS.CONNECTED,
+      };
     }
 
     if (!senderAccount) {
@@ -500,7 +526,7 @@ export const campaignService = {
       getCampaignEmailProvider(senderAccount);
     }
 
-    campaign.senderEmailAccountId = effectiveSenderId;
+    campaign.senderEmailAccountId = effectiveSenderId || null;
 
     // Recheck recipient eligibility immediately before execution!
     const eligibleContacts = await this.resolveEligibleRecipients(

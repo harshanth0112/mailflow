@@ -231,12 +231,6 @@ export const CampaignComposerModal = ({
   };
 
   const handleSendNow = async () => {
-    if (!formData.senderEmailAccountId) {
-      setError('Please select a sender email account before launching.');
-      setStep(1);
-      return;
-    }
-
     if (audienceCount === 0) {
       setError('Cannot send campaign with 0 eligible opted-in recipients.');
       setStep(2);
@@ -458,11 +452,12 @@ export const CampaignComposerModal = ({
 
                 <div>
                   <label className="block text-xs font-mono uppercase text-slate-400 mb-1">
-                    Sending Mailbox Account <span className="text-red-400">*</span>
+                    Sending Mailbox Account
                   </label>
                   {senderAccounts.length === 0 ? (
-                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
-                      No connected email accounts available in this workspace. Please connect a Google account in Email Accounts settings first.
+                    <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs flex items-center justify-between">
+                      <span>Default Email Provider (Sendliberty)</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-500/20 text-indigo-300">ACTIVE</span>
                     </div>
                   ) : (
                     <select
@@ -471,7 +466,7 @@ export const CampaignComposerModal = ({
                       onChange={handleChange}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                     >
-                      <option value="">-- Select Mailbox --</option>
+                      <option value="">-- Default Provider (Sendliberty) --</option>
                       {senderAccounts.map((acc) => (
                         <option key={acc._id} value={acc._id}>
                           {acc.emailAddress} ({acc.provider.toUpperCase()})
